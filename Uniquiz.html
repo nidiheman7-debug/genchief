@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>University Quiz</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --cream:  #F7F4EF;
+      --ink:    #1C1C1C;
+      --muted:  #888;
+      --rule:   #D4CFC8;
+      --accent: #C8432A;
+      --correct:#2D6A4F;
+      --wrong:  #C1121F;
+      --cor-bg: #EAF4EE;
+      --wrg-bg: #FDECEA;
+      --serif:  'Playfair Display', Georgia, serif;
+      --sans:   'DM Sans', 'Helvetica Neue', sans-serif;
+    }
+    /* 1. Clear color overrides for the dark theme */
+body.dark-theme {
+  --cream:  #121212;  /* Deep dark background */
+  --ink:    #F5F5F5;  /* Light text */
+  --muted:  #A0A0A0;  /* Secondary text */
+  --rule:   #2A2A2A;  /* Dark subtle borders */
+  
+  /* Retain correct/wrong accent visibility but deepen background tints */
+  --cor-bg: #1B3B2B;  
+  --wrg-bg: #421C1F;
+}
+
+/* 2. Add smooth theme transition animations directly to your body */
+body {
+  background-color: var(--cream);
+  color: var(--ink);
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+  position: relative; /* Gives the toggle absolute alignment reference context */
+}
+
+/* 3. The precise floating top-right alignment styling rules */
+.theme-toggle-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--ink);
+  padding: 8px;
+  border-radius: 50%; /* Perfect circular icon button wrapper */
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  transition: all 0.2s ease;
+  z-index: 1000; /* Guarantees it floats over all screen layouts safely */
+}
+
+.theme-toggle-btn:hover {
+  background-color: var(--rule);
+}
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    button { font: inherit; border: none; background: none; cursor: pointer; }
+
+    body {
+      font-family: var(--serif);
+      background: var(--cream);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0 0 60px;
+    }
+
+    /* ── Course picker ── */
+    #course-screen { width:100%; max-width:700px; padding:48px 24px; animation:fadeUp .5s ease both; }
+
+    .masthead { border-bottom:2px solid var(--ink); padding-bottom:16px; margin-bottom:48px; }
+    .masthead-label { font-family:var(--sans); font-size:10px; font-weight:700; letter-spacing:6px; text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
+    .masthead-title { font-family:var(--serif); font-size:clamp(32px,7vw,52px); font-weight:900; line-height:1.1; color:var(--ink); }
+    .masthead-title em { font-style:italic; color:var(--accent); }
+
+    .course-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:16px; }
+
+    .course-card {
+      border:1px solid var(--rule); padding:24px 20px; text-align:left;
+      background:transparent; transition:border-color .2s, transform .2s, box-shadow .2s;
+      position:relative; overflow:hidden;
+    }
+    .course-card::before {
+      content:""; position:absolute; top:0; left:0;
+      width:3px; height:0; background:var(--accent); transition:height .25s ease;
+    }
+    .course-card:hover { border-color:var(--ink); transform:translateY(-3px); box-shadow:0 8px 24px rgba(0,0,0,.07); }
+    .course-card:hover::before { height:100%; }
+    .course-code { font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:4px; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
+    .course-name { font-family:var(--serif); font-size:18px; color:var(--ink); line-height:1.35; }
+    .course-meta { font-family:var(--sans); font-size:12px; color:var(--muted); margin-top:12px; }
+
+    /* ── Quiz screen ── */
+    #quiz-screen { display:none; width:100%; max-width:660px; padding:0 24px; }
+
+    .quiz-nav {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:20px 0 14px; margin-bottom:36px; border-bottom:2px solid var(--ink);
+    }
+    .back-btn { font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:var(--muted); transition:color .2s; }
+    .back-btn:hover { color:var(--ink); }
+    .nav-course-code { font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:5px; text-transform:uppercase; color:var(--ink); }
+    .nav-progress { font-family:var(--sans); font-size:11px; color:var(--muted); letter-spacing:2px; }
+
+    .dots-row { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:36px; }
+    .dot { width:8px; height:8px; border-radius:50%; background:var(--rule); transition:background .3s; }
+    .dot.done { background:var(--ink); }
+    .dot.current { background:var(--accent); }
+
+    .ghost-num { font-family:var(--serif); font-size:clamp(80px,20vw,120px); font-weight:900; color:#EDE9E3; line-height:.85; margin-bottom:-18px; user-select:none; }
+
+    .type-badge {
+      display:inline-block; font-family:var(--sans); font-size:10px; font-weight:700;
+      letter-spacing:3px; text-transform:uppercase; color:var(--cream);
+      background:var(--ink); padding:4px 10px; margin-bottom:14px; position:relative; z-index:1;
+    }
+
+    .q-text { font-size:clamp(18px,3.5vw,24px); line-height:1.5; color:var(--ink); margin-bottom:32px; position:relative; z-index:1; }
+
+    .options { list-style:none; }
+    .opt-btn {
+      width:100%; background:transparent; border:none; border-bottom:1px solid var(--rule);
+      padding:16px 0; display:flex; align-items:center; gap:18px; text-align:left; transition:background .18s;
+    }
+    .options li:first-child .opt-btn { border-top:1px solid var(--rule); }
+    .opt-btn:hover:not(:disabled) { background:rgba(0,0,0,.025); }
+    .opt-btn:disabled { cursor:default; }
+    .opt-letter { font-family:var(--sans); font-size:10px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:var(--muted); width:24px; flex-shrink:0; transition:color .2s; }
+    .opt-label  { font-family:var(--serif); font-size:17px; color:#555; flex:1; transition:color .2s; }
+    .opt-icon   { font-size:16px; width:18px; text-align:center; opacity:0; transition:opacity .2s; }
+
+    .opt-btn.selected .opt-letter { color:var(--ink); }
+    .opt-btn.selected .opt-label  { color:var(--ink); font-weight:600; }
+    .opt-btn.selected .opt-icon   { opacity:1; }
+
+    .opt-btn.correct { background:var(--cor-bg); }
+    .opt-btn.correct .opt-letter,
+    .opt-btn.correct .opt-label,
+    .opt-btn.correct .opt-icon { color:var(--correct); }
+    .opt-btn.correct .opt-icon { opacity:1; }
+
+    .opt-btn.wrong { background:var(--wrg-bg); }
+    .opt-btn.wrong .opt-letter,
+    .opt-btn.wrong .opt-label,
+    .opt-btn.wrong .opt-icon { color:var(--wrong); }
+    .opt-btn.wrong .opt-icon { opacity:1; }
+
+    .footer {
+      margin-top:28px; display:flex; justify-content:flex-end; align-items:center;
+      gap:20px; min-height:52px; border-top:1px solid var(--rule); padding-top:20px;
+    }
+    .submit-btn {
+      background:var(--ink); color:var(--cream); font-family:var(--sans); font-size:11px;
+      font-weight:700; letter-spacing:3px; text-transform:uppercase; padding:13px 32px;
+      transition:background .2s, transform .15s;
+    }
+    .submit-btn:hover { background:#333; transform:translateY(-1px); }
+    .result-msg { font-family:var(--sans); font-size:12px; font-weight:600; letter-spacing:1px; line-height:1.5; flex:1; animation:fadeUp .3s ease; }
+    .result-msg.correct { color:var(--correct); }
+    .result-msg.wrong   { color:var(--wrong); }
+    .next-btn { font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:var(--muted); text-decoration:underline; flex-shrink:0; transition:color .2s; }
+    .next-btn:hover { color:var(--ink); }
+
+    /* ── Score screen ── */
+    #score-screen { display:none; width:100%; max-width:660px; padding:48px 24px; animation:fadeUp .5s ease both; }
+    .score-header { border-bottom:2px solid var(--ink); padding-bottom:16px; margin-bottom:40px; }
+    .score-label  { font-family:var(--sans); font-size:10px; font-weight:700; letter-spacing:6px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+    .score-course { font-family:var(--serif); font-size:28px; font-weight:700; color:var(--ink); }
+    .score-big    { font-family:var(--serif); font-size:clamp(72px,20vw,110px); font-weight:900; line-height:1; color:var(--ink); margin-bottom:4px; }
+    .score-sub    { font-family:var(--sans); font-size:14px; color:var(--muted); margin-bottom:28px; letter-spacing:1px; }
+    .grade-pill   { display:inline-block; padding:8px 20px; margin-bottom:40px; }
+    .score-actions { display:flex; gap:16px; flex-wrap:wrap; }
+    .action-btn   { font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:3px; text-transform:uppercase; padding:13px 28px; transition:background .2s, transform .15s; }
+    .action-btn.primary   { background:var(--ink); color:var(--cream); }
+    .action-btn.primary:hover { background:#333; transform:translateY(-1px); }
+    .action-btn.secondary { border:1px solid var(--rule); color:var(--ink); }
+    .action-btn.secondary:hover { border-color:var(--ink); }
+
+    @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+    .quiz-animate { animation:fadeUp .4s ease both; }
+  </style>
+</head>
+<body>
+<body>
+  <div id="course-screen">
+     <button id="theme-toggle" class="theme-toggle-btn" title="Toggle Theme">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+  </button>
+    <div class="masthead">
+      <div class="masthead-label">University Assessment</div>
+      <h1 class="masthead-title">Choose a<br><em>Course</em> to Begin</h1>
+    </div>
+    <div class="course-grid" id="course-grid"></div>
+  </div>
+
+  <div id="quiz-screen">
+    <div class="quiz-nav">
+      <button class="back-btn" onclick="goHome()">&#8592; Courses</button>
+      <span class="nav-course-code" id="nav-code"></span>
+      <span class="nav-progress" id="nav-progress"></span>
+    </div>
+    <div class="dots-row" id="dots-row"></div>
+    <div class="ghost-num" id="ghost-num"></div>
+    <span class="type-badge" id="type-badge"></span>
+    <p class="q-text" id="q-text"></p>
+    <ul class="options" id="options-list"></ul>
+    <div class="footer" id="footer"></div>
+  </div>
+
+  <div id="score-screen">
+    <div class="score-header">
+      <div class="score-label" id="score-label"></div>
+      <div class="score-course" id="score-course"></div>
+    </div>
+    <div class="score-big" id="score-big"></div>
+    <div class="score-sub" id="score-sub"></div>
+    <div class="grade-pill" id="grade-pill"></div>
+    <div class="score-actions">
+      <button class="action-btn primary" onclick="retryQuiz()">Retry Quiz</button>
+      <button class="action-btn secondary" onclick="goHome()">All Courses</button>
+    </div>
+  </div>
+
+  <script>
+    const courses = [
+      {
+        code:"GST 112", name:"Use of English & Communication Skills",
+        questions:[
+          {type:"mcq",text:"Which of the following is a synonym for 'verbose'?",options:["Concise","Wordy","Silent","Brief"],correct:1,explanation:"'Verbose' means using more words than necessary — wordy."},
+          {type:"tf", text:"A topic sentence usually appears at the end of a paragraph.",options:["True","False"],correct:1,explanation:"A topic sentence typically appears at the beginning of a paragraph."},
+          {type:"mcq",text:"The plural of 'criterion' is:",options:["Criterions","Criteria","Criterias","Criterium"],correct:1,explanation:"The correct plural of 'criterion' is 'criteria' (Latin origin)."},
+          {type:"tf", text:"An abstract noun names something that can be seen or touched.",options:["True","False"],correct:1,explanation:"Abstract nouns name ideas or feelings that cannot be perceived physically."},
+          {type:"mcq",text:"Which sentence is grammatically correct?",options:["Neither of the students were prepared.","Neither of the students was prepared.","Neither of the student was prepared.","Neither student were prepared."],correct:1,explanation:"'Neither' is singular; the correct verb form is 'was'."},
+          {type:"tf", text:"A thesis statement expresses the main argument of an essay.",options:["True","False"],correct:0,explanation:"Yes — a thesis statement captures the central claim of the essay."},
+          {type:"mcq",text:"Which rhetorical device involves repeating a word at the beginning of successive clauses?",options:["Anaphora","Metaphor","Hyperbole","Synecdoche"],correct:0,explanation:"Anaphora is the repetition of a word or phrase at the start of successive clauses."},
+          {type:"tf", text:"'Its' and 'it\u2019s' mean the same thing.",options:["True","False"],correct:1,explanation:"'Its' is possessive; 'it\u2019s' is a contraction of 'it is'."},
+          {type:"mcq",text:"Which of these is an example of a compound sentence?",options:["She ran fast.","She ran fast, and she won the race.","Running fast, she won.","She won because she ran fast."],correct:1,explanation:"A compound sentence joins two independent clauses with a coordinating conjunction."},
+          {type:"tf", text:"In formal writing, contractions such as 'don't' are acceptable.",options:["True","False"],correct:1,explanation:"Contractions are generally avoided in formal academic writing."},
+          {type:"mcq",text:"Which part of speech modifies a verb, adjective, or another adverb?",options:["Noun","Pronoun","Adverb","Preposition"],correct:2,explanation:"Adverbs modify verbs, adjectives, or other adverbs."},
+          {type:"tf", text:"'Affect' is most commonly used as a verb.",options:["True","False"],correct:0,explanation:"'Affect' is typically a verb (to influence); 'effect' is typically a noun (a result)."},
+          {type:"mcq",text:"The passive voice of 'The teacher marked the scripts' is:",options:["The scripts marked the teacher.","The scripts were marked by the teacher.","The teacher had marked the scripts.","The teacher is marking the scripts."],correct:1,explanation:"Passive voice: 'The scripts were marked by the teacher.'"},
+          {type:"tf", text:"A bibliography and a reference list are exactly the same thing.",options:["True","False"],correct:1,explanation:"A bibliography lists all consulted works; a reference list includes only cited works."},
+          {type:"mcq",text:"Which of the following is NOT a type of essay?",options:["Expository","Narrative","Locomotive","Argumentative"],correct:2,explanation:"'Locomotive' is not an essay type."}
+        ]
+      },
+      {
+        code:"BIO 102", name:"General Biology II",
+        questions:[
+          {type:"mcq",text:"Which organelle is known as the powerhouse of the cell?",options:["Nucleus","Ribosome","Mitochondria","Lysosome"],correct:2,explanation:"Mitochondria generate ATP through cellular respiration."},
+          {type:"tf", text:"Photosynthesis occurs in the mitochondria.",options:["True","False"],correct:1,explanation:"Photosynthesis occurs in chloroplasts, not mitochondria."},
+          {type:"mcq",text:"Which process directly produces gametes in animals?",options:["Mitosis","Meiosis","Binary fission","Budding"],correct:1,explanation:"Meiosis produces haploid gametes through two division stages."},
+          {type:"tf", text:"DNA is double-stranded while RNA is single-stranded.",options:["True","False"],correct:0,explanation:"DNA is typically double-stranded; most RNA molecules are single-stranded."},
+          {type:"mcq",text:"The basic unit of classification in taxonomy is:",options:["Genus","Family","Species","Kingdom"],correct:2,explanation:"Species is the fundamental unit of biological classification."},
+          {type:"tf", text:"All bacteria are harmful to humans.",options:["True","False"],correct:1,explanation:"Many bacteria are beneficial — they aid digestion, fix nitrogen, and are used in food production."},
+          {type:"mcq",text:"Which blood type is the universal donor?",options:["A","B","AB","O negative"],correct:3,explanation:"O negative red blood cells can be given to patients of any blood type."},
+          {type:"tf", text:"Osmosis moves water from lower solute to higher solute concentration.",options:["True","False"],correct:0,explanation:"Osmosis moves water from lower solute (higher water potential) to higher solute concentration."},
+          {type:"mcq",text:"Which of these is NOT a function of the skeletal system?",options:["Support","Hormone production","Protection","Movement"],correct:1,explanation:"Hormone production is the function of the endocrine system."},
+          {type:"tf", text:"Enzymes are biological catalysts made of proteins.",options:["True","False"],correct:0,explanation:"Enzymes are proteins that speed up biochemical reactions."},
+          {type:"mcq",text:"The process by which plants lose water through leaves is called:",options:["Respiration","Transpiration","Guttation","Evaporation"],correct:1,explanation:"Transpiration is the evaporation of water from plant leaves through stomata."},
+          {type:"tf", text:"Viruses are considered living organisms.",options:["True","False"],correct:1,explanation:"Viruses lack cells and cannot reproduce independently."},
+          {type:"mcq",text:"Which vitamin is synthesised by skin exposed to sunlight?",options:["Vitamin A","Vitamin B12","Vitamin C","Vitamin D"],correct:3,explanation:"The skin produces Vitamin D when exposed to UVB radiation."},
+          {type:"tf", text:"The heart is part of the respiratory system.",options:["True","False"],correct:1,explanation:"The heart belongs to the circulatory system, not the respiratory system."},
+          {type:"mcq",text:"Which nitrogenous base is in RNA but NOT in DNA?",options:["Adenine","Guanine","Uracil","Cytosine"],correct:2,explanation:"RNA contains uracil instead of thymine (found in DNA)."}
+        ]
+      },
+      {
+        code:"CHEM 102", name:"Organic Chemistry (Chapter I)",
+        questions: [
+  {
+    "type": "mcq",
+    "text": "Which of the following carbon compounds is NOT typically classified as an organic compound?",
+    "options": ["Methane", "Ethanol", "Carbonate", "Glucose"],
+    "correct": 2,
+    "explanation": "Organic chemistry is the study of carbon compounds with the exception of oxides, sulphides, and carbonates of carbon."
+  },
+  {
+    "type": "mcq",
+    "text": "The tetravalent nature of carbon means it has how many valence electrons?",
+    "options": ["2", "4", "6", "8"],
+    "correct": 1,
+    "explanation": "Carbon has a tetravalent nature, meaning it has 4 valence electrons and is able to bond with 4 different atoms."
+  },
+  {
+    "type": "mcq",
+    "text": "The ability of carbon atoms to join together to form a chain is known as:",
+    "options": ["Catenation", "Conjugation", "Tetravalency", "Elucidation"],
+    "correct": 0,
+    "explanation": "Carbon exhibits catenation, which is the ability of carbon atoms to join together to form a chain (-C-C-)."
+  },
+  {
+    "type": "mcq",
+    "text": "Which type of bond is exclusively found in the alkane family?",
+    "options": ["Only pie bonds", "Sigma (single) bond", "One sigma and one pie bond", "One sigma and two pie bonds"],
+    "correct": 1,
+    "explanation": "The bond in alkanes is a sigma (single) bond. Alkenes have a sigma and pie bond, while alkynes have one sigma and two pie bonds."
+  },
+  {
+    "type": "mcq",
+    "text": "Why do organic compounds generally fail to conduct electricity?",
+    "options": ["They are highly flammable", "They have high melting points", "They contain mobile ions", "They are covalent and lack mobile ions or electrons"],
+    "correct": 3,
+    "explanation": "Organic compounds are covalent in nature; they exist as molecules and don't contain mobile ions or electrons, therefore they do not conduct electricity."
+  },
+  {
+    "type": "mcq",
+    "text": "Most organic compounds are insoluble in water. Which of the following is an exception due to the presence of hydrogen bonds?",
+    "options": ["Petrol", "Ethanol", "Kerosene", "Rubber"],
+    "correct": 1,
+    "explanation": "Ethanol, glucose, and ethanoic acid are exceptions that are soluble in water because of the presence of hydrogen bonds."
+  },
+  {
+    "type": "mcq",
+    "text": "Unsaturated organic compounds are more chemically reactive than saturated ones primarily because of the presence of:",
+    "options": ["Stronger covalent bonds", "Multiple bonds or more electrons", "Hydrogen bonds", "Oxygen atoms"],
+    "correct": 1,
+    "explanation": "Unsaturated compounds have multiple bonds (double or triple). The presence of more electrons makes them more chemically reactive than saturated compounds."
+  },
+  {
+    "type": "mcq",
+    "text": "Which spectroscopic analysis is primarily used to determine the functional group present in an organic compound?",
+    "options": ["Ultraviolet/visible spectroscopy", "Nuclear Magnetic Resonance (NMR)", "Infra red spectroscopy (IR)", "Thin layer chromatography (TLC)"],
+    "correct": 2,
+    "explanation": "Infra red (IR) spectroscopy is used specifically to determine the functional group present in an organic compound."
+  },
+  {
+    "type": "tf",
+    "text": "Nuclear Magnetic Resonance (NMR) spectroscopy is used for the elucidation of the structures of organic compounds.",
+    "options": ["True", "False"],
+    "correct": 0,
+    "explanation": "NMR is used for the elucidation (bringing out) of the structures of organic compounds."
+  },
+  {
+    "type": "mcq",
+    "text": "What is the general chemical formula for Alkanes?",
+    "options": ["CnH2n", "CnH2n-2", "CnH2n+2", "CnH2n+1OH"],
+    "correct": 2,
+    "explanation": "The general chemical formula for the Alkane homologous series is CnH2n+2."
+  },
+  {
+    "type": "mcq",
+    "text": "The functional group -COOH is characteristic of which homologous series?",
+    "options": ["Alkanols", "Alkanoic / carboxylic acids", "Alkanals", "Alkanoates"],
+    "correct": 1,
+    "explanation": "The -COOH group is the functional group for Alkanoic or carboxylic acids."
+  },
+  {
+    "type": "mcq",
+    "text": "Successive members of a homologous series differ by adjacent:",
+    "options": ["-CH", "-CH2", "-CH3", "-OH"],
+    "correct": 1,
+    "explanation": "A key characteristic of a homologous series is that individual members (homologs) differ by adjacent -CH2 groups."
+  },
+  {
+    "type": "tf",
+    "text": "A functional group determines the main chemical properties of a homologous series.",
+    "options": ["True", "False"],
+    "correct": 0,
+    "explanation": "A functional group is an atom, radical, or bond common to a series that directly determines its main chemical properties."
+  },
+  {
+    "type": "mcq",
+    "text": "Members of the same homologous series have the same:",
+    "options": ["Physical properties", "Chemical properties", "Melting points", "Boiling points"],
+    "correct": 1,
+    "explanation": "Members of a homologous series share the same chemical properties, but they have different physical properties (like melting/boiling points)."
+  },
+  {
+    "type": "mcq",
+    "text": "The chemical formula CnH2n-2 represents which homologous series?",
+    "options": ["Alkane", "Alkene", "Alkyne", "Alkanol"],
+    "correct": 2,
+    "explanation": "The Alkyne family is represented by the general molecular formula CnH2n-2."
+  },
+  {
+      "type": "mcq",
+      "text": "Who was the Swedish chemist that originally proposed the 'Vital Force Theory' in the early 19th century?",
+      "options": ["Friedrich Wöhler", "Jöns Jacob Berzelius", "August Kekulé", "Antoine Lavoisier"],
+      "correct": 1,
+      "explanation": "Jöns Jacob Berzelius proposed the Vital Force Theory, postulating that organic compounds could only be generated within living organisms via a unique, non-reproducible 'vital force'."
+    },
+    {
+      "type": "mcq",
+      "text": "What did the Vital Force Theory state regarding the synthesis of organic molecules?",
+      "options": [
+        "They can only be synthesized from inorganic minerals in a laboratory.",
+        "They can only be produced by living organisms and cannot be synthesized artificially.",
+        "They are formed spontaneously in nature through volcanic activity.",
+        "They require a high concentration of metallic catalysts to form."
+      ],
+      "correct": 1,
+      "explanation": "The theory asserted that a mysterious 'vital force' inherent to living tissues (plants and animals) was absolute and essential to produce organic matter, making artificial laboratory synthesis impossible."
+    },
+    {
+      "type": "mcq",
+      "text": "In which year did German chemist Friedrich Wöhler successfully synthesize an organic compound from an inorganic starting material, fracturing the Vital Force Theory?",
+      "options": ["1808", "1828", "1858", "1888"],
+      "correct": 1,
+      "explanation": "Friedrich Wöhler carried out his groundbreaking synthesis in 1828, an event widely accepted as the birth of modern organic chemistry."
+    },
+    {
+      "type": "mcq",
+      "text": "Which inorganic compound did Friedrich Wöhler heat in his laboratory to accidentally synthesize urea?",
+      "options": ["Ammonium chloride", "Ammonium cyanate", "Sodium carbonate", "Potassium cyanide"],
+      "correct": 1,
+      "explanation": "Wöhler heated ammonium cyanate (NH4CNO), an inorganic mineral salt, and discovered it isomerized completely into urea, an organic compound."
+    },
+    {
+      "type": "mcq",
+      "text": "What is the biological significance of urea, the compound synthesized by Wöhler in his historic experiment?",
+      "options": [
+        "It is a primary sugar utilized in cellular respiration.",
+        "It is an organic waste product excreted in the urine of mammals.",
+        "It is a structural lipid found in plant cell walls.",
+        "It is a gaseous neurotransmitter found in the brain."
+      ],
+      "correct": 1,
+      "explanation": "Urea is a well-known organic compound found naturally in animal urine. Synthesizing it outside a living body directly disproved that organic materials required a biological 'vital force'."
+    },
+    {
+      "type": "mcq",
+      "text": "What is the modern, universally accepted definition of organic chemistry?",
+      "options": [
+        "The study of all compounds extracted from dead mineral matter.",
+        "The study of the chemical properties of carbon and its compounds.",
+        "The study of biological processes occurring exclusively in plant systems.",
+        "The study of compounds containing only ionic bonds."
+      ],
+      "correct": 2,
+      "explanation": "Modern organic chemistry is defined simply as the chemistry of carbon compounds, regardless of whether their origin is natural or synthetic."
+    },
+    {
+      "type": "mcq",
+      "text": "Despite containing carbon, which group of compounds is traditionally EXCLUDED from organic chemistry and treated as inorganic?",
+      "options": [
+        "Methane, Ethane, and Propane",
+        "Carbon oxides, Carbonates, and Cyanides",
+        "Alcohols, Ethers, and Esters",
+        "Carbohydrates, Proteins, and Nucleic acids"
+      ],
+      "correct": 1,
+      "explanation": "Simple carbon compounds like carbon monoxide (CO), carbon dioxide (CO2), carbonates (CO3^2-), bicarbonates (HCO3^-), and cyanides (CN^-) are classified as inorganic due to their properties and mineral-like behaviors."
+    },
+    {
+      "type": "mcq",
+      "text": "Which of the following is NOT one of the three primary structural reasons why carbon forms an immense variety of millions of organic compounds?",
+      "options": [
+        "Its strong capacity for catenation",
+        "Its absolute tetravalency",
+        "Its highly radioactive and unstable nucleus",
+        "Its ability to readily form stable multiple bonds"
+      ],
+      "correct": 2,
+      "explanation": "Carbon's abundance of compounds is driven by catenation, tetravalency, and its ability to form multiple stable bonds (double/triple). Nuclear radioactivity has no role in forming stable organic molecules."
+    },
+    {
+      "type": "mcq",
+      "text": "The property of catenation is best defined as the ability of an element to:",
+      "options": [
+        "Form ionic crystals with group 1 alkali metals.",
+        "Bond with itself to form long stable chains, branched networks, or closed rings.",
+        "Change its physical state rapidly under standard room temperature.",
+        "Absorb water molecules directly from the atmosphere."
+      ],
+      "correct": 1,
+      "explanation": "Catenation is the self-linking characteristic of carbon atoms, creating robust carbon-carbon covalent frameworks that act as the structural spine for organic molecules."
+    },
+    {
+      "type": "mcq",
+      "text": "What electronic change occurs when a carbon atom transitions from its ground state to its excited bonding state to achieve tetravalency?",
+      "options": [
+        "It loses two electrons completely to form a C2+ cation.",
+        "An electron from the 2s orbital is promoted to a vacant 2pz orbital, yielding 4 unpaired electrons.",
+        "Two electrons from the 1s inner shell move outward to the 2p subshell.",
+        "It shares electrons exclusively via coordinate dative bonding."
+      ],
+      "correct": 1,
+      "explanation": "In its ground state (1s² 2s² 2px¹ 2py¹), carbon has only two unpaired electrons. Promoting a 2s electron into the empty 2pz orbital gives it 4 unpaired valence electrons (1s² 2s¹ 2px¹ 2py¹ 2pz¹), enabling it to form 4 covalent bonds."
+    },
+    {
+      "type": "mcq",
+      "text": "How is the broad classification of organic compounds split based on the nature of their carbon skeletal architecture?",
+      "options": [
+        "Acidic and Basic compounds",
+        "Acyclic (Aliphatic) and Cyclic (Ring) compounds",
+        "Natural and Synthetic compounds",
+        "Volatile and Non-volatile compounds"
+      ],
+      "correct": 1,
+      "explanation": "Organic structures are fundamentally divided into open-chain forms, called acyclic or aliphatic compounds, and closed-loop forms, called cyclic or ring compounds."
+    },
+    {
+      "type": "mcq",
+      "text": "Which term is synonymous with 'acyclic compounds' and refers to straight or branched open-chain carbon structures?",
+      "options": ["Aromatic compounds", "Heterocyclic compounds", "Aliphatic compounds", "Alicyclic compounds Ami"],
+      "correct": 2,
+      "explanation": "Acyclic compounds are also known as aliphatic compounds. They feature open chains of carbon atoms that do not form a closed ring system."
+    },
+    {
+      "type": "mcq",
+      "text": "An organic compound contains a closed ring of carbon atoms but its chemical properties closely match those of open-chain alkanes. What is its classification?",
+      "options": ["Aromatic compound", "Alicyclic compound", "Heterocyclic compound", "Acyclic compound"],
+      "correct": 1,
+      "explanation": "Alicyclic (aliphatic cyclic) compounds contain carbon rings but behave chemically like open-chain aliphatic molecules (e.g., cyclobutane, cyclohexane)."
+    },
+    {
+      "type": "mcq",
+      "text": "What structural feature distinguishes 'aromatic compounds' from other cyclic organic molecules?",
+      "options": [
+        "They contain at least one ring that possesses a highly stable, alternating single-and-double bond system, typically based on benzene.",
+        "They contain strictly single bonds throughout their ring framework.",
+        "They are completely open chains with no closed loop paths.",
+        "They must contain an oxygen atom embedded directly inside the ring."
+      ],
+      "correct": 0,
+      "explanation": "Aromatic compounds contain a special, highly stable conjugated ring system with alternating double and single bonds, historically typified by the benzene ring."
+    },
+    {
+      "type": "mcq",
+      "text": "If a cyclic compound contains a ring built from carbon atoms along with an atom of another element like Nitrogen, Oxygen, or Sulfur, it is classified as:",
+      "options": ["An aliphatic straight chain", "A homocyclic compound", "A heterocyclic compound", "An alicyclic alkane"],
+      "correct": 2,
+      "explanation": "Heterocyclic compounds are cyclic systems where one or more of the atoms making up the ring structure is a heteroatom (an element other than carbon, such as N, O, or S)."
+    },
+    {
+      "type": "mcq",
+      "text": "The operational definition of a 'functional group' is best stated as:",
+      "options": [
+        "The long hydrocarbon chain that makes a molecule insoluble in water.",
+        "An atom or group of atoms that determines the characteristic chemical behavior and reactivity of an organic molecule.",
+        "The total count of neutrons located inside a carbon nucleus.",
+        "The temporary shape an organic molecule assumes when heated."
+      ],
+      "correct": 1,
+      "explanation": "A functional group is the specific atom or structural cluster within a molecule that acts as its reactive center, dictating how that entire compound behaves chemically."
+    },
+    {
+      "type": "mcq",
+      "text": "What is a 'homologous series' in organic chemistry?",
+      "options": [
+        "A group of compounds with entirely different formulas but identical physical boiling points.",
+        "A family of structurally related organic compounds that share the same functional group and general molecular formula.",
+        "A collection of elements located in Group 4 of the periodic table.",
+        "A mix of organic and inorganic compounds that react violently together."
+      ],
+      "correct": 1,
+      "explanation": "A homologous series is a family of organic compounds sharing a common general formula, identical functional groups, and similar chemical trends."
+    },
+    {
+      "type": "mcq",
+      "text": "By what specific fixed structural unit does each consecutive member of a homologous series differ from the member immediately preceding or following it?",
+      "options": ["A methyl group (-CH3)", "A methylene group (-CH2-)", "An ethyl group (-CH2CH3)", "A carbonyl group (-CO-)"],
+      "correct": 1,
+      "explanation": "Successive members of any homologous series differ uniformly by a single methylene group (-CH2-)."
+    },
+    {
+      "type": "mcq",
+      "text": "Given that a methylene unit (-CH2-) is the structural step change between successive homologs, what is the exact molecular mass difference between them? (Atomic weights: C=12, H=1)",
+      "options": ["12 amu", "14 amu", "16 amu", "28 amu"],
+      "correct": 1,
+      "explanation": "A methylene unit consists of 1 Carbon (12 amu) and 2 Hydrogens (2 × 1 amu = 2 amu). 12 + 2 = 14 amu mass difference between consecutive members."
+    },
+    {
+      "type": "mcq",
+      "text": "Which statement accurately describes the trend in physical properties, such as boiling points, within a single homologous series as molecular mass increases?",
+      "options": [
+        "Physical properties remain completely identical across all members.",
+        "Physical properties show a regular, steady gradation (e.g., boiling points rise due to increasing Van der Waals forces).",
+        "Physical properties decrease unpredictably and randomly.",
+        "Boiling points drop sharply because large molecules cannot form covalent bonds."
+      ],
+      "correct": 1,
+      "explanation": "As the carbon chain length grows within a homologous series, the molecular surface area increases, which progressively strengthens the intermolecular Van der Waals forces. This causes a regular, predictable increase in boiling and melting points."
+    }
+]
+      },
+      {
+        code: "CHEM 102", name:"Nomenclature of organic compounds (Chapter II)",
+        questions:[]
+      },
+      {
+        code: "CHEM 102", name: "Hydrocarbons (Chapter III)",
+        questions: []
+      },
+   {
+    code: "CHEM 102", name: "Alcohols",
+    questions: [
+      {
+      "type": "mcq",
+    "text": "What is the general molecular formula representation for a simple alcohol?",
+    "options": ["R-X", "R-O-R'", "R-OH", "R-COOH"],
+    "correct": 2,
+    "explanation": "Alcohols are characterized by a hydroxyl group (-OH) attached to a carbon atom, giving the general formula R-OH."
+  },
+    {
+    "type": "mcq",
+    "text": "Which of the following formulas represents a tertiary (3°) alcohol?",
+    "options": ["CH3CH2OH", "(CH3)2CHOH", "(CH3)3COH", "HOCH2CH2OH"],
+    "correct": 2,
+    "explanation": "A tertiary alcohol has the -OH carbon bonded to 3 other carbons. (CH3)[span_1](start_span)3COH is 2-Methylpropan-2-ol, a tertiary alcohol."
+  },
+  {
+    "type": "mcq",
+    "text": "When Ethene (CH2=CH2) undergoes acid-catalysed hydration, what is the product?",
+    "options": ["Ethanol (CH3CH2OH)", "Methanol (CH3OH)", "Diethyl ether (C2H5OC2H5)", "Ethanal (CH3CHO)"],
+    "correct": 0,
+    "explanation": "Ethene reacts with water (H2O) in the presence of an acid catalyst to form ethanol (CH3CH2OH)."
+  },
+  {
+    "type": "mcq",
+    "text": "Which product is formed by reducing a ketone (R2C=O) with NaBH4?",
+    "options": ["Primary alcohol (RCH2OH)", "Secondary alcohol (R2CHOH)", "Tertiary alcohol (R3COH)", "Carboxylic acid (RCOOH)"],
+    "correct": 1,
+    "explanation": "Aldehydes reduce to primary alcohols, whereas ketones reduce to secondary alcohols (R2CHOH)."
+  },
+  {
+    "type": "mcq",
+    "text": "What is the formula of the polyhydric alcohol known as Ethylene Glycol?",
+    "options": ["CH3OH", "HOCH2CH2OH", "CH3CH2CH2OH", "(CH3)2CHOH"],
+    "correct": 1,
+    "explanation": "Ethylene glycol is a polyhydric alcohol with the formula HOCH2CH2OH."
+  },
+  {
+    "type": "mcq",
+    "text": "In the fermentation of glucose (C6H12O6), what is produced alongside ethanol (C2H5OH)?",
+    "options": ["Oxygen (O2)", "Methane (CH4)", "Carbon dioxide (CO2)", "Hydrogen (H2)"],
+    "correct": 2,
+    "explanation": "Yeast enzymes break down glucose to give ethanol and CO2: C6H12O6 -> 2C2H5OH + 2CO2."
+  },
+  {
+    "type": "mcq",
+    "text": "Hydroboration-Oxidation of propene (CH3CH=CH2) converts it into which alcohol?",
+    "options": ["Propan-1-ol (CH3CH2CH2OH)", "Propan-2-ol ((CH3)2CHOH)", "Propanal (CH3CH2CHO)", "Acetone (CH3COCH3)"],
+    "correct": 0,
+    "explanation": "Hydroboration-Oxidation follows the Anti-Markovnikov rule, converting the alkene to a primary alcohol, propan-1-ol."
+  },
+  {
+    "type": "mcq",
+    "text": "Why do alcohols like Butan-1-ol (C4H9OH) have higher boiling points than alkanes of similar molecular weight?",
+    "options": ["They are ionic compounds", "They form intermolecular hydrogen bonds (O-H...O)", "They have stronger covalent bonds", "They are more dense"],
+    "correct": 1,
+    "explanation": "The presence of the -OH group allows for intermolecular hydrogen bonds, significantly raising the boiling point."
+  },
+  {
+    "type": "mcq",
+    "text": "Heating ethanol (CH3CH2OH) with concentrated H2SO4 at 170°C produces:",
+    "options": ["Diethyl ether (C2H5OC2H5)", "Ethene (CH2=CH2)", "Acetic acid (CH3COOH)", "Ethyl hydrogen sulfate"],
+    "correct": 1,
+    "explanation": "At higher temperatures (approx. 170°C), dehydration of ethanol with conc. [span_8](start_span)H2SO4 forms the alkene, ethene."
+  },
+  {
+    "type": "mcq",
+    "text": "Heating ethanol (CH3CH2OH) with concentrated H2SO4 at 140°C produces:",
+    "options": ["Diethyl ether (C2H5OC2H5)", "Ethene (CH2=CH2)", "Ethyl chloride", "Acetone"],
+    "correct": 0,
+    "explanation": "At lower temperatures (approx. 140°C), dehydration of ethanol with conc. H2SO4 produces an ether, diethyl ether."
+  },
+  {
+    "type": "mcq",
+    "text": "What happens when a secondary alcohol (R2CHOH) is oxidized with K2Cr2O7/H+?",
+    "options": ["It forms a carboxylic acid", "It forms an aldehyde", "It forms a ketone (R2C=O)", "No reaction occurs"],
+    "correct": 2,
+    "explanation": "Secondary alcohols are oxidized to ketones, which stop at that stage under normal conditions."
+  },
+  {
+    "type": "mcq",
+    "text": "Fischer Esterification of acetic acid (CH3COOH) and ethanol (C2H5OH) produces:",
+    "options": ["Ethyl acetate (CH3COOC2H5) + H2O", "Diethyl ether (C2H5OC2H5)", "Acetone + H2O", "No reaction"],
+    "correct": 0,
+    "explanation": "Alcohols react with carboxylic acids in the presence of H2SO4 to form an ester (CH3COOC2H5) and water."
+  },
+  {
+    "type": "mcq",
+    "text": "What is the correct order of reactivity for alcohols reacting with halogen acids (HX)?",
+    "options": ["1° > 2° > 3°", "3° > 2° > 1°", "1° > 3° > 2°", "All are equally reactive"],
+    "correct": 1,
+    "explanation": "The reactivity of alcohols towards halogen acids (HX) increases with substitution: 3° > 2° > 1°."
+  },
+  {
+    "type": "mcq",
+    "text": "Reaction of Formaldehyde (HCHO) with Grignard reagent (RMgX) followed by hydrolysis yields:",
+    "options": ["A tertiary alcohol", "A secondary alcohol", "A primary alcohol (RCH2OH)", "An ether"],
+    "correct": 2,
+    "explanation": "Formaldehyde reacts with RMgX to produce a primary alcohol after hydrolysis."
+  },
+  {
+    "type": "mcq",
+    "text": "What is the IUPAC name for (CH3)2CHOH?",
+    "options": ["Propan-1-ol", "Propan-2-ol", "Ethanol", "Butan-2-ol"],
+    "correct": 1,
+    "explanation": "(CH3)2CHOH is an isopropyl alcohol, which is named Propan-2-ol in the IUPAC system."
+  },
+  {
+    "type": "mcq",
+    "text": "When an aldehyde (RCHO) reacts with a Grignard reagent (R'MgX) and undergoes hydrolysis, what class of alcohol is formed?",
+    "options": [
+      "Primary alcohol (RCH<sub>2</sub>OH)", 
+      "Secondary alcohol (RR'CHOH)", 
+      "Tertiary alcohol (R<sub>3</sub>COH)", 
+      "Phenol (C<sub>6</sub>H<sub>5</sub>OH)"
+    ],
+    "correct": 1,
+    "explanation": "Aldehydes (RCHO) react with Grignard reagents (R'MgX) to produce a secondary alcohol after hydrolysis.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "Alcohols can act as weak acids by donating a proton to form an alkoxide ion (RO<sup>-</sup>). What is the correct order of acidity among alcohols?",
+    "options": [
+      "Tertiary (R<sub>3</sub>COH) > Secondary (R<sub>2</sub>CHOH) > Primary (RCH<sub>2</sub>OH) > Methanol (CH<sub>3</sub>OH)", 
+      "Methanol (CH<sub>3</sub>OH) > Primary (RCH<sub>2</sub>OH) > Secondary (R<sub>2</sub>CHOH) > Tertiary (R<sub>3</sub>COH)", 
+      "Primary (RCH<sub>2</sub>OH) > Tertiary (R<sub>3</sub>COH) > Secondary (R<sub>2</sub>CHOH) > Methanol (CH<sub>3</sub>OH)", 
+      "Methanol (CH<sub>3</sub>OH) = Primary (RCH<sub>2</sub>OH) = Secondary (R<sub>2</sub>CHOH) = Tertiary (R<sub>3</sub>COH)"
+    ],
+    "correct": 1,
+    "explanation": "Methanol (CH<sub>3</sub>OH) is the most acidic, and acidity decreases as more alkyl groups are added: methanol > primary > secondary > tertiary. This is because alkyl groups increase electron density on the oxygen, destabilizing the anion.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "For reactions involving the cleavage of the C-O bond via an S<sub>N</sub>1/ionisation mechanism, what is the general order of reactivity?",
+    "options": [
+      "Primary (RCH<sub>2</sub>OH) > Secondary (R<sub>2</sub>CHOH) > Tertiary (R<sub>3</sub>COH)", 
+      "Tertiary (R<sub>3</sub>COH) > Secondary (R<sub>2</sub>CHOH) > Primary (RCH<sub>2</sub>OH)", 
+      "Methanol (CH<sub>3</sub>OH) > Primary (RCH<sub>2</sub>OH) > Secondary (R<sub>2</sub>CHOH)", 
+      "All alcohols react at the same rate in S<sub>N</sub>1"
+    ],
+    "correct": 1,
+    "explanation": "For S<sub>N</sub>1/ionisation reactions involving C-O bond cleavage, tertiary alcohols (R<sub>3</sub>COH) are the most reactive, followed by secondary, then primary.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "What is the IUPAC name for the alcohol with the molecular formula C<sub>6</sub>H<sub>5</sub>CH<sub>2</sub>OH, commonly known as Benzyl alcohol?",
+    "options": [
+      "Phenol", 
+      "Phenylmethanol", 
+      "Hexanol", 
+      "Cyclohexanol"
+    ],
+    "correct": 1,
+    "explanation": "The IUPAC name for Benzyl alcohol, which has the formula C<sub>6</sub>H<sub>5</sub>CH<sub>2</sub>OH, is Phenylmethanol.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "What is the expected product when a tertiary alcohol (R<sub>3</sub>COH) is treated with a mild oxidizing agent like acidified K<sub>2</sub>Cr<sub>2</sub>O<sub>7</sub>?",
+    "options": [
+      "A ketone (R<sub>2</sub>C=O)", 
+      "A carboxylic acid (RCOOH)", 
+      "An aldehyde (RCHO)", 
+      "No reaction"
+    ],
+    "correct": 3,
+    "explanation": "Tertiary alcohols (R<sub>3</sub>COH) are resistant to mild oxidation and will yield no reaction under normal conditions.",
+    "image": ""
+  },
+  
+  {
+    "type": "mcq",
+    "text": "Which of the following organic structures has the highest boiling point due to extensive intermolecular hydrogen bonding?",
+    "options": [
+      "CH<sub>3</sub>CH<sub>2</sub>CH<sub>2</sub>OH", 
+      "CH<sub>3</sub>CH<sub>2</sub>OCl", 
+      "CH<sub>3</sub>CH<sub>2</sub>OCH<sub>3</sub>", 
+      "CH<sub>3</sub>CH<sub>2</sub>CH<sub>3</sub>"
+    ],
+    "correct": 0,
+    "explanation": "Propan-1-ol (CH<sub>3</sub>CH<sub>2</sub>CH<sub>2</sub>OH) contains a highly polar hydroxyl (-OH) group capable of forming strong intermolecular hydrogen bonds, leading to a significantly higher boiling point than ethers, haloalkanes, or alkanes of similar molar mass."
+  },
+  {
+    "type": "mcq",
+    "text": "Identify the primary product formed when a primary alcohol structure (RCH<sub>2</sub>OH) is completely oxidized by an excess of a strong oxidizing agent like acidified KMnO<sub>4</sub>:",
+    "options": [
+      "An ester, RCOOR'", 
+      "A ketone, RCOR'", 
+      "A carboxylic acid, RCOOH", 
+      "An alkene, RCH=CH<sub>2</sub>"
+    ],
+    "correct": 2,
+    "explanation": "Strong oxidizing agents fully oxidize primary alcohols first to aldehydes, and then immediately convert them further into their corresponding carboxylic acids (RCOOH)."
+  },
+  {
+    "type": "mcq",
+    "text": "Which statement best describes the solubility of monohydric alcohols in water?",
+    "options": [
+      "Solubility decreases as the carbon chain length increases.", 
+      "Solubility increases as the carbon chain length increases.", 
+      "Alcohols are completely insoluble regardless of structure.", 
+      "Solubility depends only on the number of double bonds present."
+    ],
+    "correct": 0,
+    "explanation": "Lower alcohols are highly soluble because the -OH group forms hydrogen bonds with water. As the hydrophobic alkyl carbon chain increases in size, it overrides the polar nature of the hydroxyl group, decreasing solubility."
+  },
+  {
+    "type": "mcq",
+    "text": "What is the systematic IUPAC name for the trihydric alcohol structure represented as HOCH<sub>2</sub>CH(OH)CH<sub>2</sub>OH?",
+    "options": [
+      "Ethane-1,2-diol", 
+      "Propane-1,2,3-triol", 
+      "Butane-1,3-diol", 
+      "Propan-1-ol"
+    ],
+    "correct": 1,
+    "explanation": "The compound contains a continuous chain of 3 carbon atoms with a hydroxyl group attached to each carbon, giving it the systematic name Propane-1,2,3-triol (commonly known as glycerol)."
+  },
+  {
+    "type": "mcq",
+    "text": "Industrial synthesis of methanol (CH<sub>3</sub>OH) involves the catalytic reduction of carbon monoxide. What is the condensed gas mixture reactant called?",
+    "options": [
+      "Natural gas (CH<sub>4</sub> + H<sub>2</sub>)", 
+      "Synthesis gas / Water gas (CO + H<sub>2</sub>)", 
+      "Producer gas (CO + N<sub>2</sub>)", 
+      "Olefin gas (CH<sub>2</sub>=CH<sub>2</sub>)"
+    ],
+    "correct": 1,
+    "explanation": "Methanol is prepared industrially on a large scale by reacting carbon monoxide and hydrogen gas, a mixture known as synthesis gas or water gas, over a ZnO-Cr<sub>2</sub>O<sub>3</sub> catalyst layout."
+  },
+  {
+    "type": "mcq",
+    "text": "What is the structural classification of 2-Methylpropan-2-ol, commonly written in condensed form as (CH<sub>3</sub>)<sub>3</sub>COH?",
+    "options": [
+      "Primary (1&deg;) alcohol", 
+      "Secondary (2&deg;) alcohol", 
+      "Tertiary (3&deg;) alcohol", 
+      "Dihydric diol"
+    ],
+    "correct": 2,
+    "explanation": "In (CH<sub>3</sub>)<sub>3</sub>COH, the carbon atom bound to the functional hydroxyl (-OH) group is directly linked to three other methyl carbon groups, making it a tertiary alcohol framework."
+  },
+  {
+    "type": "mcq",
+    "text": "When an alcohol reacts with an active alkali metal like sodium (Na), what are the condensed products generated by the displacement?",
+    "options": [
+      "Sodium alkoxide (RONa) and Hydrogen gas (H<sub>2</sub>)", 
+      "Sodium hydroxide (NaOH) and an Alkane (RH)", 
+      "An Ester (RCOONa) and Water (H<sub>2</sub>O)", 
+      "An Ether (ROR) and Sodium hydride (NaH)"
+    ],
+    "correct": 0,
+    "explanation": "Alcohols display weakly acidic properties, reacting with highly reactive metals to cleave the O-H bond, forming a sodium alkoxide salt (RONa) and liberating hydrogen gas."
+  },
+  {
+    "type": "mcq",
+    "text": "Which of the following describes the Lucas Test result used to distinguish between alcohol classes structurally?",
+    "options": [
+      "Primary alcohols form a turbid solution immediately at room temperature.", 
+      "Secondary alcohols never show turbidity even when heated.", 
+      "Tertiary alcohols produce immediate turbidity/cloudiness at room temperature.", 
+      "Methanol turns deep blue when mixed with Lucas reagent."
+    ],
+    "correct": 2,
+    "explanation": "Lucas reagent (anhydrous ZnCl<sub>2</sub> in conc. HCl) reacts via a carbocation mechanism. Tertiary alcohols form stable carbocations instantly, yielding insoluble alkyl chlorides that appear as immediate cloudiness."
+  },
+  {
+    "type": "mcq",
+    "text": "What condensed structural product is isolated when a primary alcohol is passed over heated copper (Cu) catalyst blocks at 300&deg;C?",
+    "options": [
+      "An Alkane, RCH<sub>3</sub>", 
+      "An Aldehyde, RCHO", 
+      "A Ketone, RCOR'", 
+      "An Ether, ROR"
+    ],
+    "correct": 1,
+    "explanation": "Catalytic dehydrogenation of primary alcohols over hot copper at 300&deg;C removes two hydrogen atoms, cleanly producing an aldehyde (RCHO) framework without risk of over-oxidation."
+  },
+  {
+    "type": "mcq",
+    "text": "In the structural representation of a monohydric alcohol, what type of chemical hybridizations are present on the oxygen atom and the carbon atom holding the -OH group?",
+    "options": [
+      "Carbon is sp<sup>2</sup>, Oxygen is sp<sup>3</sup>", 
+      "Both Carbon and Oxygen are sp<sup>3</sup> hybridized", 
+      "Carbon is sp<sup>3</sup>, Oxygen is sp<sup>2</sup>", 
+      "Both Carbon and Oxygen are sp<sup>2</sup> hybridized"
+    ],
+    "correct": 1,
+    "explanation": "In saturated alcohols, the carbon holding the -OH group forms 4 single sigma bonds (sp<sup>3</sup>). The oxygen atom forms 2 single sigma bonds and holds 2 lone pairs, which also fits an sp<sup>3</sup> hybridization state layout."
+  },
+  {
+    "type": "mcq",
+    "text": "Which reducing agent is highly selective and can reduce an aldehyde or ketone into an alcohol framework without reducing a co-existing carboxylic acid group?",
+    "options": [
+      "LiAlH<sub>4</sub>", 
+      "NaBH<sub>4</sub>", 
+      "H<sub>2</sub> / Ni", 
+      "Conc. H<sub>2</sub>SO<sub>4</sub>"
+    ],
+    "correct": 1,
+    "explanation": "Sodium borohydride (NaBH<sub>4</sub>) is a milder reducing agent than LiAlH<sub>4</sub>. It cleanly reduces aldehydes and ketones but is not strong enough to attack carboxylic acids or esters."
+  },
+  {
+    "type": "mcq",
+    "text": "What is the primary organic product when ethanol (CH<sub>3</sub>CH<sub>2</sub>OH) reacts with thionyl chloride (SOCl<sub>2</sub>) in the presence of pyridine?",
+    "options": [
+      "CH<sub>3</sub>CH<sub>2</sub>Cl", 
+      "CH<sub>3</sub>CH<sub>2</sub>OCH<sub>2</sub>CH<sub>3</sub>", 
+      "CH<sub>3</sub>CH<sub>2</sub>OSO<sub>2</sub>Cl", 
+      "CH<sub>2</sub>=CH<sub>2</sub>"
+    ],
+    "correct": 0,
+    "explanation": "Thionyl chloride replaces the hydroxyl group with a chlorine atom to form chloroethane (CH<sub>3</sub>CH<sub>2</sub>Cl). This reaction is highly favored because the side products (SO<sub>2</sub> and HCl) escape as gases, leaving a pure product layout."
+  },
+  {
+    "type": "mcq",
+    "text": "When an organic compound undergoes nucleophilic substitution where aqueous potassium hydroxide (KOH) converts bromoethane (CH<sub>3</sub>CH<sub>2</sub>Br) into ethanol, what is the leaving group?",
+    "options": [
+      "The hydroxyl ion, OH<sup>-</sup>", 
+      "The potassium ion, K<sup>+</sup>", 
+      "The bromide ion, Br<sup>-</sup>", 
+      "The ethyl radical, CH<sub>3</sub>CH<sub>2</sub>&bull;"
+    ],
+    "correct": 2,
+    "explanation": "In this nucleophilic substitution pathway, the incoming nucleophile (OH<sup>-</sup>) attacks the electrophilic carbon, displacing the bromide ion (Br<sup>-</sup>) as the leaving group."
+  },
+  {
+    "type": "mcq",
+    "text": "An unknown alcohol is treated with Iodine (I<sub>2</sub>) in the presence of aqueous NaOH and forms a bright yellow precipitate. Which structural feature must be present in the alcohol?",
+    "options": [
+      "A terminal -OH group on a long carbon chain", 
+      "A methyl group adjacent to the hydroxyl-bearing carbon, CH<sub>3</sub>CH(OH)-", 
+      "A benzene ring attached directly to the -OH group", 
+      "Two or more separate hydroxyl groups (a diol framework)"
+    ],
+    "correct": 1,
+    "explanation": "This is the positive result for the classical Iodoform Test. Alcohols containing a secondary methyl-carbinol structure like CH<sub>3</sub>CH(OH)- are oxidized to methyl ketones, which then react further to yield the yellow triiodomethane (CHI<sub>3</sub>) precipitate."
+  },
+  {
+    "type": "mcq",
+    "text": "What is industrial 'denatured alcohol' (methylated spirits) structurally treated with to render it unfit for human consumption?",
+    "options": [
+      "Pure distilled water to dilute the solution", 
+      "Toxic additives like methanol (CH<sub>3</sub>OH) and pyridine", 
+      "Concentrated sulfuric acid to increase acidity", 
+      "Sodium ethoxide salts to form a clear suspension"
+    ],
+    "correct": 1,
+    "explanation": "Industrial ethanol is deliberately denatured by adding small percentages of poisonous methanol and foul-smelling pyridine. This prevents recreational consumption and exempts the chemical fluid from steep beverage taxes."
+  }
+  ]
+},
+{
+  code: "CHEM 102", name: "Ethers", 
+  questions: [
+  {
+    "type": "mcq",
+    "text": "According to the systematic IUPAC nomenclature rules for ethers, how is an unsymmetrical ether structurally named?",
+    "options": [
+      "The smaller alkyl group is named as an alkoxy substituent on the parent alkane formed by the larger alkyl chain.",
+      "The two organic carbon chains are listed alphabetically followed by the suffix word 'ether'.",
+      "The longer carbon chain forms an alkyl substituent on the shorter oxygenated alkoxy base fragment.",
+      "Both chains are treated as high-priority esters and named with the suffix '-oate' natively."
+    ],
+    "correct": 0,
+    "explanation": "In the IUPAC system for ethers, the larger alkyl group is selected as the parent alkane chain, while the smaller alkyl group combined with the oxygen atom is treated and named as an alkoxy substituent (e.g., methoxy-, ethoxy-).",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "What is the systematic IUPAC name for the ether commonly known as anisole?",
+    "options": [
+      "Ethoxyethane",
+      "Methoxymethane",
+      "Diphenyl oxide",
+      "Methoxybenzene"
+    ],
+    "correct": 3,
+    "explanation": "Anisole consists of a phenyl ring (C<sub>6</sub>H<sub>5</sub>-) linked via an oxygen atom to a methyl group (-CH<sub>3</sub>). Its systematic IUPAC name is methoxybenzene.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "Which statement correctly explains why diethyl ether (MW = 74 g/mol) has a boiling point of only 35&deg;C, whereas its structural isomer butan-1-ol (MW = 74 g/mol) boils at 118&deg;C?",
+    "options": [
+      "Ethers possess a completely nonpolar covalent framework that prevents any dipole-dipole attractions.",
+      "Ethers cannot form intermolecular hydrogen bonds with each other because they lack a hydrogen atom bound directly to oxygen.",
+      "Butan-1-ol has a more compact spherical geometry that maximizes its London dispersion forces.",
+      "Ethers undergo rapid thermal cleavage at room temperature, which artificially lowers their observed physical boiling indices."
+    ],
+    "correct": 1,
+    "explanation": "Because ethers lack an O-H bond, they cannot form intermolecular hydrogen bonds with each other. This absence of strong hydrogen bonding causes them to have much lower boiling points than isomeric alcohols of similar molecular weight.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "What are the two reaction steps required to prepare methyl ethyl ether using the Williamson Ether Synthesis method?",
+    "options": [
+      "Dehydrating two moles of methanol with hot concentrated sulfuric acid at exactly 170&deg;C.",
+      "Reacting a sodium alkoxide (C<sub>2</sub>H<sub>5</sub>ONa) with a primary alkyl halide like iodomethane (CH<sub>3</sub>I) via an S<sub>N</sub>2 pathway.",
+      "Cleaving a cyclic oxolane ring using one equivalent of concentrated hydroiodic acid under high temperature frames.",
+      "Combining two separate carboxylic acid chains with a zinc oxide metallic catalyst layout."
+    ],
+    "correct": 1,
+    "explanation": "The Williamson Ether Synthesis involves an S<sub>N</sub>2 reaction where an alkoxide ion acts as a nucleophile to displace a halide leaving group from a primary alkyl halide. To make methyl ethyl ether, sodium ethoxide (C<sub>2</sub>H<sub>5</sub>ONa) reacts with iodomethane (CH<sub>3</sub>I).",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "Why are ethers widely used as solvents in organic chemistry laboratories for a large variety of reactions?",
+    "options": [
+      "They are highly reactive toward nucleophiles, which accelerates reaction rates.",
+      "They are generally chemically inert under normal conditions and do not react with dilute acids, bases, oxidising agents, or reducing agents.",
+      "They automatically eliminate water from the reaction environment due to their structural acidity properties.",
+      "They form permanent ionic links with organic compounds to stabilize highly unstable solid crystals."
+    ],
+    "correct": 1,
+    "explanation": "Ethers are relatively unreactive and chemically inert under normal conditions. They do not react with dilute acids, bases, or common oxidising and reducing agents, making them excellent unreactive solvents for dissolving organic compounds.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "When 1 equivalent of concentrated hydroiodic acid (HI) reacts with an unsymmetrical ether (R-O-R') at elevated temperatures, what organic fragments are initially generated?",
+    "options": [
+      "Two separate alkyl iodides and a single molecule of water.",
+      "A symmetrical ester and an active free radical halogen element.",
+      "An alcohol and an alkyl iodide.",
+      "An alkene and a gaseous hydrogen dioxide layout configuration."
+    ],
+    "correct": 2,
+    "explanation": "Treatment of an ether with 1 equivalent of concentrated HI or HBr at high temperatures results in the cleavage of a C-O bond, yielding one molecule of an alcohol (ROH) and one molecule of an alkyl iodide (R'I).",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "What happens when an ether is treated with an excess of concentrated hydroiodic acid (HI) at high temperatures?",
+    "options": [
+      "It forms two alkyl iodides and water.",
+      "It polymerizes into a long-chain polyether compound.",
+      "It rearranges into an aldehyde via keto-enol tautomerism.",
+      "It isolates an unreactive sodium ethoxide precipitate."
+    ],
+    "correct": 0,
+    "explanation": "When excess concentrated HI is used, the alcohol intermediate initially formed is converted into a second alkyl iodide, meaning the overall cleavage of the ether produces two alkyl iodides and a molecule of water.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "What dangerous chemical hazard occurs when ethers like diethyl ether or tetrahydrofuran (THF) are stored over prolonged periods in the presence of air and light?",
+    "options": [
+      "They break down into toxic cyanide gas.",
+      "They undergo slow autoxidation at the alpha carbon to form highly explosive hydroperoxides.",
+      "They absorb gaseous nitrogen to form toxic secondary amines.",
+      "They spontaneously solidify into highly acidic carbonate crystals."
+    ],
+    "correct": 1,
+    "explanation": "Prolonged exposure to air and light causes ethers to undergo a radical autoxidation process at the alpha carbon, forming highly shock-sensitive, explosive ether hydroperoxides.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "What structural feature allows ethers to display a small degree of solubility in water, despite their lack of internal hydrogen bonding?",
+    "options": [
+      "The oxygen atom possesses lone pairs that can accept hydrogen bonds from polar protic solvents like water.",
+      "Ethers undergo rapid reversible hydrolysis to form highly soluble diols in water.",
+      "The alkyl chains are completely hydrophilic, allowing easy integration into water networks.",
+      "Ethers carry a permanent net positive charge that interacts ionically with water molecules."
+    ],
+    "correct": 0,
+    "explanation": "Although ethers cannot act as hydrogen bond donors to each other, the lone pairs on the ether oxygen atom can act as hydrogen bond acceptors from water molecules, giving smaller ethers appreciable water solubility.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "What is the primary organic product isolated when two moles of ethanol are heated to exactly 140&deg;C in the presence of a concentrated sulfuric acid catalyst?",
+    "options": [
+      "Ethene",
+      "Ethoxyethane (Diethyl ether)",
+      "Methoxymethane (Dimethyl ether)",
+      "Ethyl ethanoate"
+    ],
+    "correct": 1,
+    "explanation": "The acid-catalysed dehydration of primary alcohols is temperature-dependent. At a lower temperature of 140&deg;C, intermolecular dehydration occurs between two molecules of ethanol to form the symmetrical ether ethoxyethane (diethyl ether).",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "What is the systematic IUPAC name for the cyclic ether commonly referred to as Tetrahydrofuran (THF)?",
+    "options": [
+      "Dioxane",
+      "Anisole",
+      "Oxolane",
+      "Methoxyethane"
+    ],
+    "correct": 2,
+    "explanation": "Tetrahydrofuran (THF) is a four-carbon cyclic compound containing one oxygen atom in its ring. Its systematic IUPAC name is oxolane.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "What is the first crucial step in the mechanistic pathway of acid-catalysed ether cleavage by strong halogen acids?",
+    "options": [
+      "Nucleophilic attack by a halide ion via backside S<sub>N</sub>2 displacement.",
+      "Protonation of the ether oxygen lone pair to form a reactive oxonium ion intermediate.",
+      "Homolytic cleavage of the carbon-oxygen sigma bond to form a radical pair.",
+      "Spontaneous elimination of an alpha hydrogen atom to form a temporary vinyl ether."
+    ],
+    "correct": 1,
+    "explanation": "Before a C-O bond can be cleaved by a halide nucleophile, the ether oxygen must be protonated by the strong acid. This step converts the poor alkoxide leaving group into a good leaving group within a reactive oxonium ion intermediate.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "Which compound is classified as a symmetrical ether?",
+    "options": [
+      "Methoxyethane",
+      "Ethoxyethane",
+      "Methoxybenzene",
+      "Oxolane"
+    ],
+    "correct": 1,
+    "explanation": "Symmetrical ethers have identical organic groups attached to both sides of the oxygen atom. Ethoxyethane (diethyl ether) has an ethyl group on both sides, making it symmetrical.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "Ethers function chemically as which type of species due to the presence of non-bonding lone pairs on the oxygen atom?",
+    "options": [
+      "Strong Arrhenius acids",
+      "Electrophilic intermediates",
+      "Lewis bases",
+      "Strong oxidizing agents"
+    ],
+    "correct": 2,
+    "explanation": "Because the oxygen atom in an ether has two non-bonding lone pairs of electrons, it can donate electron pairs to electron-deficient species (like protons or Lewis acids like BF<sub>3</sub>), allowing it to behave as a Lewis base.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "What product is generated when diethyl ether acts as a Lewis base and coordinates with concentrated sulfuric acid?",
+    "options": [
+      "An oxonium salt",
+      "An explosive hydroperoxide",
+      "An alkyl halide salt",
+      "An ester suspension"
+    ],
+    "correct": 0,
+    "explanation": "When the oxygen lone pair of an ether accepts a proton from a strong acid like H<sub>2</sub>SO<sub>4</sub>, it forms a protonated conjugate acid intermediate known as an oxonium salt.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "Which of the following ethers is completely miscible with water in all proportions?",
+    "options": [
+      "Diethyl ether",
+      "Anisole",
+      "Diphenyl ether",
+      "Tetrahydrofuran (THF)"
+    ],
+    "correct": 3,
+    "explanation": "While diethyl ether has a limited solubility of 7.5g per 100mL of water, cyclic ethers like Tetrahydrofuran (THF) and Dioxane are completely miscible with water due to their exposed oxygen lone pairs and favorable ring structure constraints.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "What is the common name for the unsymmetrical ether represented by the formula CH<sub>3</sub>OC<sub>2</sub>H<sub>5</sub>?",
+    "options": [
+      "Dimethyl ether",
+      "Ethyl methyl ether",
+      "Methoxyethane",
+      "Diethyl ether"
+    ],
+    "correct": 1,
+    "explanation": "For common names of unsymmetrical ethers, the two alkyl groups attached to the oxygen atom are listed alphabetically followed by the word 'ether'. Since methyl and ethyl are attached, it is named ethyl methyl ether.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "What vital safety protocol must always be performed in a chemistry laboratory before distilling or heating an old sample of an ether?",
+    "options": [
+      "Test the sample for the presence of explosive peroxides.",
+      "Add concentrated hydroiodic acid to stabilize the alkyl bonds.",
+      "Saturate the fluid with pure sodium metal pieces to cool it down.",
+      "Filter the solution to remove cyclic oxolane gas fractions."
+    ],
+    "correct": 0,
+    "explanation": "Because ethers form highly unstable, shock-sensitive hydroperoxides when exposed to air over time, distilling an ether containing these impurities can concentrate them to the point of explosion. Always test for peroxides prior to distillation.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "What type of mechanism takes place during the second step of a Williamson Ether Synthesis when the alkoxide ion attacks the alkyl halide?",
+    "options": [
+      "S<sub>N</sub>1 Substitution",
+      "E1 Elimination",
+      "S<sub>N</sub>2 Substitution",
+      "E2 Elimination"
+    ],
+    "correct": 2,
+    "explanation": "The Williamson ether synthesis is a classic S<sub>N</sub>2 nucleophilic substitution reaction, where the strongly nucleophilic alkoxide ion performs a backside attack to displace the halide leaving group from an unhindered primary alkyl halide in a single concerted step.",
+    "image": ""
+  },
+  {
+    "type": "mcq",
+    "text": "What is the common name for the cyclic diether represented by the molecular formula C<sub>4</sub>H<sub>8</sub>O<sub>2</sub>, known for being fully miscible with water and boiling at 101&deg;C?",
+    "options": [
+      "Anisole",
+      "Dioxane",
+      "Oxolane",
+      "Tetrahydrofuran"
+    ],
+    "correct": 1,
+    "explanation": "The cyclic diether containing two oxygen atoms in a six-membered ring with the formula C<sub>4</sub>H<sub>8</sub>O<sub>2</sub> is commonly known as dioxane.",
+    "image": ""
+  }
+    ]
+},
+      {
+        code:"MATH 102", name:"General Mathematics II",
+        questions:[
+          {type:"mcq",text:"What is the derivative of f(x) = x\u00b3?",options:["x\u00b2","3x","3x\u00b2","x\u00b3"],correct:2,explanation:"By the power rule: d/dx(x\u207f) = nx\u207f\u207b\u00b9, so d/dx(x\u00b3) = 3x\u00b2."},
+          {type:"tf", text:"The integral of a constant is zero.",options:["True","False"],correct:1,explanation:"\u222ba dx = ax + C, not zero. The derivative of a constant is zero."},
+          {type:"mcq",text:"What is log\u2081\u2080(1000)?",options:["2","3","4","10"],correct:1,explanation:"10\u00b3 = 1000, so log\u2081\u2080(1000) = 3."},
+          {type:"tf", text:"A matrix with equal rows and columns is called a square matrix.",options:["True","False"],correct:0,explanation:"A square matrix has the same number of rows and columns (n \u00d7 n)."},
+          {type:"mcq",text:"The solution to 2x + 4 = 10 is:",options:["x = 2","x = 3","x = 4","x = 7"],correct:1,explanation:"2x = 6, therefore x = 3."},
+          {type:"tf", text:"sin\u00b2\u03b8 + cos\u00b2\u03b8 = 2 for all values of \u03b8.",options:["True","False"],correct:1,explanation:"The Pythagorean identity states sin\u00b2\u03b8 + cos\u00b2\u03b8 = 1, not 2."},
+          {type:"mcq",text:"The correct expansion of (a + b)\u00b2 is:",options:["a\u00b2 + b\u00b2","a\u00b2 + ab + b\u00b2","a\u00b2 + 2ab + b\u00b2","2a + 2b"],correct:2,explanation:"(a + b)\u00b2 = a\u00b2 + 2ab + b\u00b2 by the binomial expansion."},
+          {type:"tf", text:"The determinant of a 2\u00d72 identity matrix is 1.",options:["True","False"],correct:0,explanation:"det(I) = (1)(1) \u2212 (0)(0) = 1."},
+          {type:"mcq",text:"The sum of the interior angles of a triangle is:",options:["90\u00b0","180\u00b0","270\u00b0","360\u00b0"],correct:1,explanation:"The interior angles of any triangle sum to 180\u00b0."},
+          {type:"tf", text:"A prime number has exactly two factors: 1 and itself.",options:["True","False"],correct:0,explanation:"By definition, a prime number has exactly two distinct factors."},
+          {type:"mcq",text:"\u222b2x dx equals:",options:["2","x\u00b2 + C","2x\u00b2 + C","x + C"],correct:1,explanation:"\u222b2x dx = x\u00b2 + C (power rule for integration)."},
+          {type:"tf", text:"The number 1 is considered a prime number.",options:["True","False"],correct:1,explanation:"1 is not prime because it has only one factor, not two."},
+          {type:"mcq",text:"In the geometric sequence 2, 6, 18, 54\u2026 the common ratio is:",options:["2","3","4","6"],correct:1,explanation:"Each term is multiplied by 3."},
+          {type:"tf", text:"The slope of a horizontal line is undefined.",options:["True","False"],correct:1,explanation:"A horizontal line has slope 0; a vertical line has an undefined slope."},
+          {type:"mcq",text:"Which of the following is a complex number?",options:["\u221a4","\u221a\u22129","\u03c0","0.5"],correct:1,explanation:"\u221a\u22129 = 3i, which is a complex (imaginary) number."}
+        ]
+      },
+      {
+        code:"PHY 102", name:"General Physics II",
+        questions:[
+          {type:"mcq",text:"What is the SI unit of electric charge?",options:["Ampere","Volt","Coulomb","Ohm"],correct:2,explanation:"The SI unit of electric charge is the Coulomb (C)."},
+          {type:"tf", text:"Light travels faster in water than in a vacuum.",options:["True","False"],correct:1,explanation:"Light travels slowest in denser media; its speed in vacuum is its maximum."},
+          {type:"mcq",text:"Ohm's Law states that V = ?",options:["I/R","IR","I+R","R/I"],correct:1,explanation:"Ohm's Law: V = IR (voltage = current \u00d7 resistance)."},
+          {type:"tf", text:"A concave lens converges light rays to a focal point.",options:["True","False"],correct:1,explanation:"A concave (diverging) lens spreads light rays apart. A convex lens converges them."},
+          {type:"mcq",text:"Which type of wave does not require a medium to travel?",options:["Sound waves","Water waves","Electromagnetic waves","Seismic waves"],correct:2,explanation:"Electromagnetic waves travel through a vacuum."},
+          {type:"tf", text:"The acceleration due to gravity on Earth is approximately 9.8 m/s\u00b2.",options:["True","False"],correct:0,explanation:"g \u2248 9.8 m/s\u00b2 near Earth's surface."},
+          {type:"mcq",text:"Which law states total momentum of a closed system is conserved?",options:["Newton's First Law","Newton's Third Law","Law of Conservation of Momentum","Hooke's Law"],correct:2,explanation:"The Law of Conservation of Momentum: total momentum is constant when no external forces act."},
+          {type:"tf", text:"Nuclear fission involves combining two light nuclei to form a heavier nucleus.",options:["True","False"],correct:1,explanation:"That describes nuclear fusion. Fission splits a heavy nucleus into smaller ones."},
+          {type:"mcq",text:"The frequency and wavelength of a wave are:",options:["Directly proportional","Inversely proportional","Equal","Unrelated"],correct:1,explanation:"v = f\u03bb; for constant wave speed, frequency and wavelength are inversely proportional."},
+          {type:"tf", text:"Transformers work on DC (direct current) supply.",options:["True","False"],correct:1,explanation:"Transformers operate on AC; DC produces no changing magnetic flux."},
+          {type:"mcq",text:"The unit of magnetic flux density is:",options:["Tesla","Weber","Henry","Farad"],correct:0,explanation:"Magnetic flux density is measured in Teslas (T)."},
+          {type:"tf", text:"In simple harmonic motion, the restoring force is proportional to displacement.",options:["True","False"],correct:0,explanation:"SHM: F = \u2212kx; restoring force is proportional to displacement."},
+          {type:"mcq",text:"What phenomenon explains why a straw appears bent in water?",options:["Reflection","Diffraction","Refraction","Interference"],correct:2,explanation:"Refraction \u2014 bending of light as it passes from water to air."},
+          {type:"tf", text:"The photoelectric effect can be explained using the wave theory of light.",options:["True","False"],correct:1,explanation:"The photoelectric effect requires the photon (particle) theory; wave theory fails to explain it."},
+          {type:"mcq",text:"A capacitor stores energy in:",options:["A magnetic field","A gravitational field","An electric field","A thermal field"],correct:2,explanation:"A capacitor stores energy in the electric field between its plates."}
+        ]
+      },
+      {
+        code:"STA 112", name:"Introduction to Statistics",
+        questions:[
+          {type:"mcq",text:"Which measure of central tendency is most affected by extreme values?",options:["Mode","Median","Mean","Range"],correct:2,explanation:"The mean uses all data values, so outliers pull it significantly."},
+          {type:"tf", text:"The median is always one of the values in the dataset.",options:["True","False"],correct:1,explanation:"For an even number of data points, the median is the average of the two middle values."},
+          {type:"mcq",text:"Probability of getting a head when a fair coin is tossed:",options:["0","0.25","0.5","1"],correct:2,explanation:"P(head) = 1/2 = 0.5 for a fair coin."},
+          {type:"tf", text:"The sum of all probabilities in a probability distribution equals 1.",options:["True","False"],correct:0,explanation:"By definition, total probability across all outcomes sums to 1."},
+          {type:"mcq",text:"Which of these is a measure of dispersion?",options:["Mean","Mode","Standard Deviation","Median"],correct:2,explanation:"Standard deviation measures how spread out data values are from the mean."},
+          {type:"tf", text:"A bar chart is suitable for displaying continuous data.",options:["True","False"],correct:1,explanation:"Histograms are used for continuous data; bar charts are for categorical data."},
+          {type:"mcq",text:"If P(A)=0.4 and P(B)=0.3 and they are mutually exclusive, P(A\u222aB)=?",options:["0.12","0.7","0.58","1.0"],correct:1,explanation:"For mutually exclusive events: P(A\u222aB) = P(A) + P(B) = 0.7."},
+          {type:"tf", text:"Variance is the square root of the standard deviation.",options:["True","False"],correct:1,explanation:"Standard deviation is the square root of variance, not the other way."},
+          {type:"mcq",text:"In a normal distribution, ~what % of data falls within one standard deviation?",options:["50%","68%","95%","99.7%"],correct:1,explanation:"Empirical rule: ~68% within \u00b11\u03c3, ~95% within \u00b12\u03c3, ~99.7% within \u00b13\u03c3."},
+          {type:"tf", text:"A scatter plot can show the relationship between two variables.",options:["True","False"],correct:0,explanation:"Scatter plots display pairs of data to reveal correlations between two variables."},
+          {type:"mcq",text:"The mode of {3,5,5,7,9,9,9,11} is:",options:["5","7","9","11"],correct:2,explanation:"9 appears three times \u2014 more than any other value."},
+          {type:"tf", text:"Correlation implies causation.",options:["True","False"],correct:1,explanation:"Two variables may be correlated without one causing the other."},
+          {type:"mcq",text:"Which sampling method gives every member an equal chance of selection?",options:["Convenience sampling","Stratified sampling","Systematic sampling","Simple random sampling"],correct:3,explanation:"Simple random sampling ensures every individual has an equal and independent chance."},
+          {type:"tf", text:"A frequency distribution table can help identify the mode.",options:["True","False"],correct:0,explanation:"The mode is the value with the highest frequency, visible in a frequency table."},
+          {type:"mcq",text:"The interquartile range (IQR) is calculated as:",options:["Q1 \u2212 Q3","Q3 \u2212 Q1","Q2 \u2212 Q1","Q3 \u2212 Q2"],correct:1,explanation:"IQR = Q3 \u2212 Q1, representing the middle 50% spread of the data."}
+        ]
+      }
+    ];
+
+    let activeCourse = null, qIndex = 0, selectedIdx = null, revealed = false, score = 0;
+
+    const courseScreen = document.getElementById("course-screen");
+    const quizScreen   = document.getElementById("quiz-screen");
+    const scoreScreen  = document.getElementById("score-screen");
+
+    function showScreen(w) {
+      courseScreen.style.display = w==="course" ? "block":"none";
+      quizScreen.style.display   = w==="quiz"   ? "block":"none";
+      scoreScreen.style.display  = w==="score"  ? "block":"none";
+    }
+
+    function buildGrid() {
+      const grid = document.getElementById("course-grid");
+      grid.innerHTML = "";
+      courses.forEach((c,i) => {
+        const btn = document.createElement("button");
+        btn.className = "course-card";
+        btn.innerHTML = `<div class="course-code">${c.code}</div><div class="course-name">${c.name}</div><div class="course-meta">${c.questions.length} questions &middot; Mix</div>`;
+        btn.addEventListener("click", () => startQuiz(i));
+        grid.appendChild(btn);
+      });
+    }
+
+    function startQuiz(idx) {
+      activeCourse = idx; qIndex = 0; score = 0;
+      showScreen("quiz"); renderQuestion();
+    }
+
+    function renderQuestion() {
+      const c = courses[activeCourse], q = c.questions[qIndex];
+      const num = qIndex+1, tot = c.questions.length;
+      selectedIdx = null; revealed = false;
+
+      quizScreen.classList.remove("quiz-animate");
+      void quizScreen.offsetWidth;
+      quizScreen.classList.add("quiz-animate");
+
+      document.getElementById("nav-code").textContent     = c.code;
+      document.getElementById("nav-progress").innerHTML = `${num} / ${tot}`;
+
+      const dr = document.getElementById("dots-row");
+      dr.innerHTML = "";
+      for(let i=0;i<tot;i++){
+        const d=document.createElement("div");
+        d.className="dot"+(i<qIndex?" done":i===qIndex?" current":"");
+        dr.appendChild(d);
+      }
+
+      document.getElementById("ghost-num").textContent  = String(num).padStart(2,"0");
+      document.getElementById("type-badge").textContent = q.type==="tf"?"True / False":"Multiple Choice";
+      document.getElementById("q-text").innerHTML     = q.text;
+
+      const ol=document.getElementById("options-list");
+      ol.innerHTML="";
+      const L=["A","B","C","D"];
+      q.options.forEach((opt,i)=>{
+        const li=document.createElement("li");
+        const btn=document.createElement("button");
+        btn.className="opt-btn";
+        btn.dataset.i=i;
+        btn.innerHTML=`<span class="opt-letter">${q.type==="tf"?"":L[i]}</span><span class="opt-label">${opt}</span><span class="opt-icon">&#9679;</span>`;
+        btn.addEventListener("click",()=>handleSelect(i));
+        li.appendChild(btn); ol.appendChild(li);
+      });
+      document.getElementById("footer").innerHTML="";
+    }
+
+    function handleSelect(idx) {
+      if(revealed) return;
+      selectedIdx=idx;
+      document.querySelectorAll(".opt-btn").forEach(b=>{ b.classList.remove("selected"); b.querySelector(".opt-icon").innerHTML="&#9679;"; });
+      const chosen=document.querySelectorAll(".opt-btn")[idx];
+      chosen.classList.add("selected");
+      const footer=document.getElementById("footer");
+      footer.innerHTML="";
+      const sub=document.createElement("button");
+      sub.className="submit-btn"; sub.textContent="Submit";
+      sub.addEventListener("click",handleReveal);
+      footer.appendChild(sub);
+    }
+
+    function handleReveal() {
+      if(selectedIdx===null) return;
+      revealed=true;
+      const q=courses[activeCourse].questions[qIndex];
+      const allBtns=document.querySelectorAll(".opt-btn");
+      const isRight=selectedIdx===q.correct;
+      if(isRight) score++;
+      allBtns.forEach(b=>{ b.disabled=true; b.classList.remove("selected"); });
+      allBtns[q.correct].classList.add("correct");
+      allBtns[q.correct].querySelector(".opt-icon").textContent="✓";
+      if(!isRight){ allBtns[selectedIdx].classList.add("wrong"); allBtns[selectedIdx].querySelector(".opt-icon").textContent="✗"; }
+      const footer=document.getElementById("footer");
+      footer.innerHTML="";
+      const msg=document.createElement("span");
+      msg.className="result-msg "+(isRight?"correct":"wrong");
+      msg.innerHTML=(isRight?"Correct! ":"Incorrect. ")+q.explanation;
+      footer.appendChild(msg);
+      const total=courses[activeCourse].questions.length;
+      const nxt=document.createElement("button");
+      nxt.className="next-btn";
+      if(qIndex<total-1){
+        nxt.textContent="Next \u2192";
+        nxt.addEventListener("click",()=>{ qIndex++; renderQuestion(); });
+      } else {
+        nxt.textContent="Finish \u2192";
+        nxt.addEventListener("click",showScore);
+      }
+      footer.appendChild(nxt);
+    }
+
+    function showScore() {
+      const c=courses[activeCourse], total=c.questions.length;
+      const pct=Math.round((score/total)*100);
+      let grade,gc,gb;
+      if(pct>=70){grade="Pass";gc="#2D6A4F";gb="#EAF4EE";}
+      else if(pct>=50){grade="Average";gc="#7B5E00";gb="#FFF8E0";}
+      else{grade="Below Pass";gc="#C1121F";gb="#FDECEA";}
+      document.getElementById("score-label").textContent  = c.code+" \u00b7 Quiz Complete";
+      document.getElementById("score-course").textContent = c.name;
+      document.getElementById("score-big").textContent    = `${score}/${total}`;
+      document.getElementById("score-sub").textContent    = `${pct}% \u2014 you answered ${score} question${score!==1?"s":""} correctly`;
+      const pill=document.getElementById("grade-pill");
+      pill.textContent=grade;
+      Object.assign(pill.style,{background:gb,color:gc,fontFamily:"var(--sans)",fontSize:"12px",fontWeight:"700",letterSpacing:"3px",textTransform:"uppercase"});
+      showScreen("score");
+    }
+
+    function retryQuiz(){ startQuiz(activeCourse); }
+    function goHome(){ activeCourse=null; showScreen("course"); }
+
+    buildGrid(); showScreen("course");
+    // Self-contained theme management system
+const themeToggler = document.getElementById("theme-toggle");
+
+themeToggler.addEventListener("click", () => {
+  document.body.classList.toggle("dark-theme");
+  
+  // Cache user selection settings
+  if (document.body.classList.contains("dark-theme")) {
+    localStorage.setItem("selectedTheme", "dark");
+  } else {
+    localStorage.setItem("selectedTheme", "light");
+  }
+});
+
+// Immediately initialize user theme preference checks on bootup routines
+if (localStorage.getItem("selectedTheme") === "dark") {
+  document.body.classList.add("dark-theme");
+}
+  </script>
+</body>
+</html>
