@@ -1,111 +1,81 @@
 // server.js
-// Minimal backend that keeps your Anthropic API key on the server and
-// exposes a single endpoint the frontend can call to generate quiz questions.
-//
-// Setup:
-//   1. npm install
-//   2. cp .env.example .env   and paste in your real API key
-//   3. npm start
-//   4. open http://localhost:3000
-
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import multer from "multer";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// Files are kept in memory only (never written to disk) and capped at 20MB,
-// matching the Claude API's per-file PDF limit.
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+// Files are kept in memory only (never written to disk) and capped at 20MB
+const upload = multer({ 
+  storage: multer.memoryStorage(), 
+  limits: { fileSize: 20 * 1024 * 1024 } 
+});
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
+// Initialize Gemini Client
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
 const QUESTION_SYSTEM_PROMPT = `You generate university-level quiz questions.
-Respond with ONLY a raw JSON array (no markdown fences, no commentary, no preamble).
-Each element must match exactly this shape:
-{
-  "type": "mcq" | "tf",
-  "text": "the question",
-  "options": ["array of option strings; 4 for mcq, exactly [\\"True\\",\\"False\\"] for tf"],
-  "correct": <integer index into options of the correct answer>,
-  "explanation": "one or two sentence explanation of the correct answer"
-}
+Respond with ONLY a raw JSON array matching this exact structure:
+[
+  {
+    "type": "mcq",
+    "text": "the question text",
+    "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+    "correct": 0,
+    "explanation": "Brief explanation of the correct answer"
+  }
+]
+For "tf" (True/False) questions, set type to "tf" and options strictly to ["True", "False"].
 Mix "mcq" and "tf" types. Keep questions accurate, unambiguous, and appropriately challenging.`;
 
-function extractQuestionsFromResponse(data) {
-  const textBlock = (data.content || []).find((b) => b.type === "text");
-  if (!textBlock) throw new Error("No text content returned by the model.");
-  const cleaned = textBlock.text.replace(/```json|```/g, "").trim();
-  const questions = JSON.parse(cleaned);
-  if (!Array.isArray(questions) || questions.length === 0) {
-    throw new Error("Model returned an empty or invalid question set.");
-  }
-  return questions;
-}
-
+// ── 1. Generate Quiz from Topic ──
 app.post("/api/generate-quiz", async (req, res) => {
   try {
-    if (!ANTHROPIC_API_KEY) {
-      return res.status(500).json({ error: "Server is missing ANTHROPIC_API_KEY. Add it to your .env file." });
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ error: "Server is missing GEMINI_API_KEY in .env file." });
     }
 
     const { topic, count = 8 } = req.body || {};
     if (!topic || typeof topic !== "string" || !topic.trim()) {
       return res.status(400).json({ error: "A 'topic' string is required." });
     }
-    const numQuestions = Math.min(Math.max(parseInt(count, 10) || 8, 1), 20);
-    const userPrompt = `Generate ${numQuestions} quiz questions about: ${topic.trim()}`;
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-5",
-        max_tokens: 4000,
-        system: QUESTION_SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
+    const numQuestions = Math.min(Math.max(parseInt(count, 10) || 8, 1), 20);
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      systemInstruction: QUESTION_SYSTEM_PROMPT,
+      generationConfig: { responseMimeType: "application/json" },
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Anthropic API error:", response.status, errText);
-      return res.status(502).json({ error: "The AI provider returned an error. Check server logs." });
-    }
-
-    const data = await response.json();
-    let questions;
-    try {
-      questions = extractQuestionsFromResponse(data);
-    } catch (e) {
-      console.error("Failed to parse model output:", e.message);
-      return res.status(502).json({ error: "Model did not return a valid question set. Try again." });
-    }
+    const userPrompt = `Generate ${numQuestions} quiz questions about: ${topic.trim()}`;
+    const result = await model.generateContent(userPrompt);
+    const textResponse = result.response.text();
+    const questions = JSON.parse(textResponse);
 
     res.json({ questions });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Unexpected server error." });
+    console.error("Gemini Topic API Error:", err);
+    res.status(500).json({ error: "Failed to generate quiz. Check server logs." });
   }
 });
 
-// ── Generate questions from an uploaded file (PDF or plain text) ──
+// ── 2. Generate Quiz from Uploaded File (PDF or Plain Text) ──
 app.post("/api/generate-quiz-from-file", upload.single("file"), async (req, res) => {
   try {
-    if (!ANTHROPIC_API_KEY) {
-      return res.status(500).json({ error: "Server is missing ANTHROPIC_API_KEY. Add it to your .env file." });
+    if (!GEMINI_API_KEY) {
+      return res.status(500).json({ error: "Server is missing GEMINI_API_KEY in .env file." });
     }
     if (!req.file) {
       return res.status(400).json({ error: "No file was uploaded." });
@@ -119,7 +89,7 @@ app.post("/api/generate-quiz-from-file", upload.single("file"), async (req, res)
 
     if (!isPdf && !isText) {
       return res.status(400).json({
-        error: "Only PDF or plain text files (.pdf, .txt, .md) are supported right now.",
+        error: "Only PDF or plain text files (.pdf, .txt, .md) are supported.",
       });
     }
 
@@ -127,58 +97,43 @@ app.post("/api/generate-quiz-from-file", upload.single("file"), async (req, res)
 that test understanding of the curriculum covered in the document — concepts, definitions, facts,
 and reasoning it contains. Base every question strictly on content actually present in the document.`;
 
-    let userContent;
-    if (isPdf) {
-      const base64 = req.file.buffer.toString("base64");
-      userContent = [
-        { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } },
-        { type: "text", text: instruction },
-      ];
-    } else {
-      const fileText = req.file.buffer.toString("utf-8").slice(0, 100000); // guard against huge files
-      userContent = [{ type: "text", text: `${instruction}\n\nDOCUMENT CONTENT:\n"""\n${fileText}\n"""` }];
-    }
-
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-5",
-        max_tokens: 4000,
-        system: QUESTION_SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userContent }],
-      }),
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      systemInstruction: QUESTION_SYSTEM_PROMPT,
+      generationConfig: { responseMimeType: "application/json" },
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Anthropic API error:", response.status, errText);
-      return res.status(502).json({ error: "The AI provider returned an error. Check server logs." });
+    let promptContents = [];
+
+    if (isPdf) {
+      // Send PDF buffer directly via inlineData
+      promptContents.push({
+        inlineData: {
+          data: req.file.buffer.toString("base64"),
+          mimeType: "application/pdf",
+        },
+      });
+      promptContents.push(instruction);
+    } else {
+      const fileText = req.file.buffer.toString("utf-8").slice(0, 100000);
+      promptContents.push(`${instruction}\n\nDOCUMENT CONTENT:\n"""\n${fileText}\n"""`);
     }
 
-    const data = await response.json();
-    let questions;
-    try {
-      questions = extractQuestionsFromResponse(data);
-    } catch (e) {
-      console.error("Failed to parse model output:", e.message);
-      return res.status(502).json({ error: "Model did not return a valid question set. Try again." });
-    }
+    const result = await model.generateContent(promptContents);
+    const textResponse = result.response.text();
+    const questions = JSON.parse(textResponse);
 
     res.json({ questions, filename: req.file.originalname });
   } catch (err) {
-    console.error(err);
+    console.error("Gemini File API Error:", err);
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({ error: "File is too large (20MB max)." });
     }
-    res.status(500).json({ error: "Unexpected server error." });
+    res.status(500).json({ error: "Failed to process document and generate quiz." });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Uniquiz AI server running at http://localhost:${PORT}`);
+  console.log(`Uniquiz Gemini server running at http://localhost:${PORT}`);
 });
+        
