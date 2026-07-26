@@ -101,7 +101,7 @@ and reasoning it contains. Base every question strictly on content actually pres
 
     // Ensure model is set to gemini-3.5-flash
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.5-flash",
+      model: "gemini-3.6-flash",
       systemInstruction: QUESTION_SYSTEM_PROMPT,
       generationConfig: { responseMimeType: "application/json" },
     });
