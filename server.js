@@ -69,9 +69,7 @@ app.post("/api/generate-quiz", async (req, res) => {
     console.error("Gemini Topic API Error:", err);
     res.status(500).json({ error: "Failed to generate quiz. Check server logs." });
   }
-});
-
-// ── 2. Generate Quiz from Uploaded File (PDF or Plain Text) ──
+});// ── 2. Generate Quiz from Uploaded File (PDF or Plain Text) ──
 app.post("/api/generate-quiz-from-file", upload.single("file"), async (req, res) => {
   try {
     if (!GEMINI_API_KEY) {
@@ -83,9 +81,13 @@ app.post("/api/generate-quiz-from-file", upload.single("file"), async (req, res)
 
     const count = req.body?.count;
     const numQuestions = Math.min(Math.max(parseInt(count, 10) || 10, 1), 20);
+
+    // Check both mimeType AND file extension (crucial for mobile uploads)
     const mimeType = req.file.mimetype;
-    const isPdf = mimeType === "application/pdf";
-    const isText = mimeType.startsWith("text/") || mimeType === "application/octet-stream";
+    const originalName = req.file.originalname.toLowerCase();
+
+    const isPdf = mimeType === "application/pdf" || mimeType === "application/x-pdf" || originalName.endsWith(".pdf");
+    const isText = mimeType.startsWith("text/") || originalName.endsWith(".txt") || originalName.endsWith(".md");
 
     if (!isPdf && !isText) {
       return res.status(400).json({
@@ -97,8 +99,9 @@ app.post("/api/generate-quiz-from-file", upload.single("file"), async (req, res)
 that test understanding of the curriculum covered in the document — concepts, definitions, facts,
 and reasoning it contains. Base every question strictly on content actually present in the document.`;
 
+    // Ensure model is set to gemini-3.5-flash
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.6l-flash",
+      model: "gemini-3.5-flash",
       systemInstruction: QUESTION_SYSTEM_PROMPT,
       generationConfig: { responseMimeType: "application/json" },
     });
@@ -106,7 +109,7 @@ and reasoning it contains. Base every question strictly on content actually pres
     let promptContents = [];
 
     if (isPdf) {
-      // Send PDF buffer directly via inlineData
+      // Send PDF buffer directly as base64 inlineData
       promptContents.push({
         inlineData: {
           data: req.file.buffer.toString("base64"),
@@ -130,9 +133,7 @@ and reasoning it contains. Base every question strictly on content actually pres
       return res.status(400).json({ error: "File is too large (20MB max)." });
     }
     res.status(500).json({ error: "Failed to process document and generate quiz." });
-  }
 });
-
 app.listen(PORT, () => {
   console.log(`Uniquiz Gemini server running at https://genchief.onrender.com:${PORT}`);
 });
