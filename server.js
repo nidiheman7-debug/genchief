@@ -134,6 +134,6 @@ and reasoning it contains. Base every question strictly on content actually pres
 });
 
 app.listen(PORT, () => {
-  console.log(`Uniquiz Gemini server running at http://localhost:${PORT}`);
+  console.log(`Uniquiz Gemini server running at https://genchief.onrender.com:${PORT}`);
 });
         
