@@ -54,7 +54,7 @@ app.post("/api/generate-quiz", async (req, res) => {
     const numQuestions = Math.min(Math.max(parseInt(count, 10) || 8, 1), 20);
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.5-flash",
       systemInstruction: QUESTION_SYSTEM_PROMPT,
       generationConfig: { responseMimeType: "application/json" },
     });
@@ -98,7 +98,7 @@ that test understanding of the curriculum covered in the document — concepts, 
 and reasoning it contains. Base every question strictly on content actually present in the document.`;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.5-flash",
       systemInstruction: QUESTION_SYSTEM_PROMPT,
       generationConfig: { responseMimeType: "application/json" },
     });
