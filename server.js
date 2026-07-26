@@ -1,4 +1,3 @@
-// server.js
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -17,6 +16,17 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const upload = multer({ 
   storage: multer.memoryStorage(), 
   limits: { fileSize: 20 * 1024 * 1024 } 
+});
+
+// Enable CORS so your GitHub Pages site can talk to this backend
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
 });
 
 app.use(express.json());
@@ -69,7 +79,9 @@ app.post("/api/generate-quiz", async (req, res) => {
     console.error("Gemini Topic API Error:", err);
     res.status(500).json({ error: "Failed to generate quiz. Check server logs." });
   }
-});// ── 2. Generate Quiz from Uploaded File (PDF or Plain Text) ──
+});
+
+// ── 2. Generate Quiz from Uploaded File (PDF or Plain Text) ──
 app.post("/api/generate-quiz-from-file", upload.single("file"), async (req, res) => {
   try {
     if (!GEMINI_API_KEY) {
@@ -99,7 +111,6 @@ app.post("/api/generate-quiz-from-file", upload.single("file"), async (req, res)
 that test understanding of the curriculum covered in the document — concepts, definitions, facts,
 and reasoning it contains. Base every question strictly on content actually present in the document.`;
 
-    // Ensure model is set to gemini-3.5-flash
     const model = genAI.getGenerativeModel({
       model: "gemini-3.6-flash",
       systemInstruction: QUESTION_SYSTEM_PROMPT,
@@ -133,8 +144,9 @@ and reasoning it contains. Base every question strictly on content actually pres
       return res.status(400).json({ error: "File is too large (20MB max)." });
     }
     res.status(500).json({ error: "Failed to process document and generate quiz." });
+  }
 });
+
 app.listen(PORT, () => {
-  console.log(`Uniquiz Gemini server running at https://genchief.onrender.com:${PORT}`);
+  console.log(`Uniquiz Gemini server running on port ${PORT}`);
 });
-        
