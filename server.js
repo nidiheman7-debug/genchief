@@ -12,13 +12,15 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// Files are kept in memory only (never written to disk) and capped at 20MB
+// ── Configuration ──
+
+// Store uploads in memory so we can send the buffer directly to Gemini
 const upload = multer({ 
   storage: multer.memoryStorage(), 
-  limits: { fileSize: 20 * 1024 * 1024 } 
+  limits: { fileSize: 20 * 1024 * 1024 } // 20MB limit
 });
 
-// Enable CORS so your frontend can talk to this backend
+// Enable CORS
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -32,10 +34,12 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// Initialize Gemini Client
+// Initialize Gemini
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-// Single global system prompt with explicit math/LaTeX rules
+// ── Global System Prompt ──
+// Declared ONCE to prevent Temporal Dead Zone ReferenceErrors.
+// Includes strict rules for LaTeX math formatting ($...$) and escaping valid JSON.
 const QUESTION_SYSTEM_PROMPT = `You generate university-level quiz questions.
 Respond with ONLY a raw JSON array matching this exact structure:
 [
@@ -48,14 +52,15 @@ Respond with ONLY a raw JSON array matching this exact structure:
   }
 ]
 For "tf" (True/False) questions, set type to "tf" and options strictly to ["True", "False"].
-For any mathematical expressions, equations, floor/ceiling functions (e.g. \\lfloor, \\rfloor), powers (e.g. f^{-1}), or formulas, wrap them in single dollar signs LaTeX syntax (e.g., "$\\lfloor -2.7 \\rfloor$", "$f^{-1}(x)$", or "$x^2 + y^2 = z^2$"). Always double-escape backslashes in JSON strings.
+CRITICAL MATH RULES: For ANY mathematical expressions, equations, floor/ceiling functions (e.g., \\lfloor, \\rfloor), powers (e.g., f^{-1}), or symbols, wrap them in single dollar signs standard LaTeX syntax (e.g., "$\\lfloor -2.7 \\rfloor$", "$f^{-1}(x)$").
+CRITICAL JSON RULES: Always double-escape backslashes for valid JSON strings (e.g., "\\\\lfloor" instead of "\\lfloor").
 Mix "mcq" and "tf" types. Keep questions accurate, unambiguous, and appropriately challenging.`;
 
 // ── 1. Generate Quiz from Topic ──
 app.post("/api/generate-quiz", async (req, res) => {
   try {
     if (!GEMINI_API_KEY) {
-      return res.status(500).json({ error: "Server is missing GEMINI_API_KEY in .env file." });
+      return res.status(500).json({ error: "Server is missing GEMINI_API_KEY." });
     }
 
     const { topic, count = 8 } = req.body || {};
@@ -73,7 +78,9 @@ app.post("/api/generate-quiz", async (req, res) => {
 
     const userPrompt = `Generate ${numQuestions} quiz questions about: ${topic.trim()}`;
     const result = await model.generateContent(userPrompt);
-    const textResponse = result.response.text();
+    
+    // Clean potential markdown blocks
+    let textResponse = result.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
     const questions = JSON.parse(textResponse);
 
     res.json({ questions });
@@ -87,7 +94,7 @@ app.post("/api/generate-quiz", async (req, res) => {
 app.post("/api/generate-quiz-from-file", upload.single("file"), async (req, res) => {
   try {
     if (!GEMINI_API_KEY) {
-      return res.status(500).json({ error: "Server is missing GEMINI_API_KEY in .env file." });
+      return res.status(500).json({ error: "Server is missing GEMINI_API_KEY." });
     }
     if (!req.file) {
       return res.status(400).json({ error: "No file was uploaded." });
@@ -96,7 +103,6 @@ app.post("/api/generate-quiz-from-file", upload.single("file"), async (req, res)
     const count = req.body?.count;
     const numQuestions = Math.min(Math.max(parseInt(count, 10) || 10, 1), 20);
 
-    // Check both mimeType AND file extension (crucial for mobile uploads)
     const mimeType = req.file.mimetype;
     const originalName = req.file.originalname.toLowerCase();
 
@@ -122,7 +128,7 @@ and reasoning it contains. Base every question strictly on content actually pres
     let promptContents = [];
 
     if (isPdf) {
-      // Send PDF buffer directly as base64 inlineData
+      // Send PDF buffer directly to Gemini natively
       promptContents.push({
         inlineData: {
           data: req.file.buffer.toString("base64"),
@@ -136,7 +142,9 @@ and reasoning it contains. Base every question strictly on content actually pres
     }
 
     const result = await model.generateContent(promptContents);
-    const textResponse = result.response.text();
+    
+    // Clean potential markdown blocks before parsing
+    let textResponse = result.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
     const questions = JSON.parse(textResponse);
 
     res.json({ questions, filename: req.file.originalname });
