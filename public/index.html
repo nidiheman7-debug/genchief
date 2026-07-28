@@ -2933,7 +2933,96 @@ if (window.MathJax) {
       }
       footer.appendChild(nxt);
     }
+// Ensure backendURL points to where your server is running (e.g., localhost:3000)
+const backendURL = "http://localhost:3000"; 
 
+// ── 1. Connect the Topic Generator ──
+document.getElementById('ai-generate-btn').addEventListener('click', async () => {
+  const topic = document.getElementById('ai-topic-input').value;
+  const count = document.getElementById('ai-count-input').value;
+  const statusEl = document.getElementById('ai-status');
+
+  if (!topic.trim()) {
+    statusEl.textContent = "Please enter a topic.";
+    statusEl.style.color = "var(--wrong)";
+    return;
+  }
+
+  statusEl.textContent = "Generating quiz...";
+  statusEl.style.color = "var(--ink)";
+  
+  try {
+    const response = await fetch(`${backendURL}/api/generate-quiz`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, count })
+    });
+
+    if (!response.ok) throw new Error("Failed to generate from server.");
+    
+    const data = await response.json();
+    statusEl.textContent = "";
+    
+    // Pass the generated questions to your UI render function
+    // Assuming you have a function called loadQuiz or startQuiz
+    startQuiz(topic, data.questions); 
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Error: Could not generate quiz. Is the UniQuiz server running?";
+    statusEl.style.color = "var(--wrong)";
+  }
+});
+
+// ── 2. Connect the PDF/File Generator ──
+document.getElementById('ai-file-generate-btn').addEventListener('click', async () => {
+  const fileInput = document.getElementById('ai-file-input');
+  const count = document.getElementById('ai-file-count-input').value;
+  const statusEl = document.getElementById('ai-file-status');
+
+  if (!fileInput.files[0]) {
+    statusEl.textContent = "Please select a PDF or Text file.";
+    statusEl.style.color = "var(--wrong)";
+    return;
+  }
+
+  statusEl.textContent = "Analyzing document and generating quiz...";
+  statusEl.style.color = "var(--ink)";
+  
+  const formData = new FormData();
+  formData.append("file", fileInput.files[0]);
+  formData.append("count", count);
+
+  try {
+    const response = await fetch(`${backendURL}/api/generate-quiz-from-file`, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!response.ok) throw new Error("Failed to process file.");
+    
+    const data = await response.json();
+    statusEl.textContent = "";
+    
+    // Pass the generated questions to your UI render function
+    startQuiz(data.filename, data.questions); 
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Error: Could not process document. Ensure the server is running and the file is under 20MB.";
+    statusEl.style.color = "var(--wrong)";
+  }
+});
+
+// ── Mock render function (Ensure this matches your actual logic) ──
+// You must have a function to handle transitioning from the menu to the quiz
+function startQuiz(title, questionsArray) {
+  document.getElementById('course-screen').style.display = 'none';
+  document.getElementById('quiz-screen').style.display = 'block';
+  document.getElementById('nav-code').textContent = title;
+  
+  // Your existing logic to map through questionsArray and render the options goes here
+  console.log("Quiz loaded with:", questionsArray);
+        }
+    
     function showScore() {
       const c=courses[activeCourse], total=c.questions.length;
       const pct=Math.round((score/total)*100);
