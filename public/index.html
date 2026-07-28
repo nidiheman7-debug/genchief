@@ -13,6 +13,17 @@
 <meta name="google-site-verification: google14cc64f9848e3173.html">
 <!-- Ensure Google Crawlers Are Allowed -->
 <meta name="robots" content="index, follow">
+  <!-- MathJax CDN for rendering LaTeX math formulas -->
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']]
+    },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   
   <style>
     :root {
