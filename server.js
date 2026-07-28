@@ -106,7 +106,10 @@ app.post("/api/generate-quiz-from-file", upload.single("file"), async (req, res)
         error: "Only PDF or plain text files (.pdf, .txt, .md) are supported.",
       });
     }
-
+if (window.renderMathInElement) {
+  renderMathInElement(document.getElementById('question-container'));
+}
+    
     const instruction = `This document is course material. Read it and generate ${numQuestions} quiz questions
 that test understanding of the curriculum covered in the document — concepts, definitions, facts,
 and reasoning it contains. Base every question strictly on content actually present in the document.`;
