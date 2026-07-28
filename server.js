@@ -61,7 +61,7 @@ app.post("/api/generate-quiz", async (req, res) => {
       return res.status(400).json({ error: "A 'topic' string is required." });
     }
 
-    const numQuestions = Math.min(Math.max(parseInt(count, 10) || 8, 1), 20);
+    const numQuestions = Math.min(Math.max(parseInt(count, 10) || 8, 1), 30);
 
     const model = genAI.getGenerativeModel({
       model: "gemini-3.6-flash",
