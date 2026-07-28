@@ -18,7 +18,7 @@ const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024 } 
 });
 
-// Enable CORS so your GitHub Pages site can talk to this backend
+// Enable CORS so your frontend can talk to this backend
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -35,6 +35,7 @@ app.use(express.static(path.join(__dirname, "public")));
 // Initialize Gemini Client
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
+// Single global system prompt with explicit math/LaTeX rules
 const QUESTION_SYSTEM_PROMPT = `You generate university-level quiz questions.
 Respond with ONLY a raw JSON array matching this exact structure:
 [
@@ -47,6 +48,7 @@ Respond with ONLY a raw JSON array matching this exact structure:
   }
 ]
 For "tf" (True/False) questions, set type to "tf" and options strictly to ["True", "False"].
+For any mathematical expressions, equations, floor/ceiling functions (e.g. \\lfloor, \\rfloor), powers (e.g. f^{-1}), or formulas, wrap them in single dollar signs LaTeX syntax (e.g., "$\\lfloor -2.7 \\rfloor$", "$f^{-1}(x)$", or "$x^2 + y^2 = z^2$"). Always double-escape backslashes in JSON strings.
 Mix "mcq" and "tf" types. Keep questions accurate, unambiguous, and appropriately challenging.`;
 
 // ── 1. Generate Quiz from Topic ──
@@ -64,7 +66,7 @@ app.post("/api/generate-quiz", async (req, res) => {
     const numQuestions = Math.min(Math.max(parseInt(count, 10) || 8, 1), 20);
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.6-flash",
+      model: "gemini-1.5-flash",
       systemInstruction: QUESTION_SYSTEM_PROMPT,
       generationConfig: { responseMimeType: "application/json" },
     });
@@ -112,25 +114,11 @@ that test understanding of the curriculum covered in the document — concepts, 
 and reasoning it contains. Base every question strictly on content actually present in the document.`;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.6-flash",
+      model: "gemini-1.5-flash",
       systemInstruction: QUESTION_SYSTEM_PROMPT,
       generationConfig: { responseMimeType: "application/json" },
     });
-const QUESTION_SYSTEM_PROMPT = `You generate university-level quiz questions.
-Respond with ONLY a raw JSON array matching this exact structure:
-[
-  {
-    "type": "mcq",
-    "text": "the question text",
-    "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-    "correct": 0,
-    "explanation": "Brief explanation of the correct answer"
-  }
-]
-For "tf" (True/False) questions, set type to "tf" and options strictly to ["True", "False"].
-For any mathematical expressions, equations, or scientific formulas, format them in standard LaTeX syntax enclosed in single dollar signs (e.g., $x^2 + y^2 = z^2$ or $\\int_{0}^{1} x \\, dx$).
-Mix "mcq" and "tf" types. Keep questions accurate, unambiguous, and appropriately challenging.`;
-    
+
     let promptContents = [];
 
     if (isPdf) {
@@ -162,6 +150,5 @@ Mix "mcq" and "tf" types. Keep questions accurate, unambiguous, and appropriatel
 });
 
 app.listen(PORT, () => {
-  console.log(`Uniquiz Gemini server running on port ${PORT}`);
+  console.log(`UniQuiz Gemini server running on port ${PORT}`);
 });
-  
