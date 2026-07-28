@@ -2883,6 +2883,11 @@ body {
         li.appendChild(btn); ol.appendChild(li);
       });
       document.getElementById("footer").innerHTML="";
+   // Add this right after inserting question text & options into the DOM:
+if (window.MathJax) {
+  MathJax.typesetPromise();
+}
+      
     }
 
     function handleSelect(idx) {
