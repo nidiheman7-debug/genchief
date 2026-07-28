@@ -146,6 +146,12 @@ and reasoning it contains. Base every question strictly on content actually pres
     res.status(500).json({ error: "Failed to process document and generate quiz." });
   }
 });
+// Inside server.js where you build the prompt for Gemini / OpenAI:
+const systemPrompt = `
+You are generating a quiz. 
+IMPORTANT: Do NOT use LaTeX or dollar signs ($) for mathematical expressions. 
+Write all math using plain text symbols (e.g., write "f: Dom(f) -> R" instead of LaTeX commands).
+`;
 
 app.listen(PORT, () => {
   console.log(`Uniquiz Gemini server running on port ${PORT}`);
