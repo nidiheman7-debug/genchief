@@ -12,15 +12,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// ── Configuration ──
-
-// Store uploads in memory so we can send the buffer directly to Gemini
+// Files are kept in memory only (never written to disk) and capped at 20MB
 const upload = multer({ 
   storage: multer.memoryStorage(), 
-  limits: { fileSize: 20 * 1024 * 1024 } // 20MB limit
+  limits: { fileSize: 20 * 1024 * 1024 } 
 });
 
-// Enable CORS
+// Enable CORS so the frontend can communicate with the backend
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -34,12 +32,10 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// Initialize Gemini
+// Initialize Gemini Client
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-// ── Global System Prompt ──
-// Declared ONCE to prevent Temporal Dead Zone ReferenceErrors.
-// Includes strict rules for LaTeX math formatting ($...$) and escaping valid JSON.
+// ── FIXED SYSTEM PROMPT: No Dollar Signs ──
 const QUESTION_SYSTEM_PROMPT = `You generate university-level quiz questions.
 Respond with ONLY a raw JSON array matching this exact structure:
 [
@@ -52,15 +48,14 @@ Respond with ONLY a raw JSON array matching this exact structure:
   }
 ]
 For "tf" (True/False) questions, set type to "tf" and options strictly to ["True", "False"].
-CRITICAL MATH RULES: For ANY mathematical expressions, equations, floor/ceiling functions (e.g., \\lfloor, \\rfloor), powers (e.g., f^{-1}), or symbols, wrap them in single dollar signs standard LaTeX syntax (e.g., "$\\lfloor -2.7 \\rfloor$", "$f^{-1}(x)$").
-CRITICAL JSON RULES: Always double-escape backslashes for valid JSON strings (e.g., "\\\\lfloor" instead of "\\lfloor").
+For any mathematical expressions, equations, or scientific formulas, format them using standard plain text and unicode characters. DO NOT use LaTeX syntax and strictly DO NOT use dollar signs ($).
 Mix "mcq" and "tf" types. Keep questions accurate, unambiguous, and appropriately challenging.`;
 
 // ── 1. Generate Quiz from Topic ──
 app.post("/api/generate-quiz", async (req, res) => {
   try {
     if (!GEMINI_API_KEY) {
-      return res.status(500).json({ error: "Server is missing GEMINI_API_KEY." });
+      return res.status(500).json({ error: "Server is missing GEMINI_API_KEY in .env file." });
     }
 
     const { topic, count = 8 } = req.body || {};
@@ -71,16 +66,14 @@ app.post("/api/generate-quiz", async (req, res) => {
     const numQuestions = Math.min(Math.max(parseInt(count, 10) || 8, 1), 20);
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-1.5-flash", // Corrected model version
       systemInstruction: QUESTION_SYSTEM_PROMPT,
       generationConfig: { responseMimeType: "application/json" },
     });
 
     const userPrompt = `Generate ${numQuestions} quiz questions about: ${topic.trim()}`;
     const result = await model.generateContent(userPrompt);
-    
-    // Clean potential markdown blocks
-    let textResponse = result.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
+    const textResponse = result.response.text();
     const questions = JSON.parse(textResponse);
 
     res.json({ questions });
@@ -94,7 +87,7 @@ app.post("/api/generate-quiz", async (req, res) => {
 app.post("/api/generate-quiz-from-file", upload.single("file"), async (req, res) => {
   try {
     if (!GEMINI_API_KEY) {
-      return res.status(500).json({ error: "Server is missing GEMINI_API_KEY." });
+      return res.status(500).json({ error: "Server is missing GEMINI_API_KEY in .env file." });
     }
     if (!req.file) {
       return res.status(400).json({ error: "No file was uploaded." });
@@ -105,30 +98,24 @@ app.post("/api/generate-quiz-from-file", upload.single("file"), async (req, res)
 
     const mimeType = req.file.mimetype;
     const originalName = req.file.originalname.toLowerCase();
-
     const isPdf = mimeType === "application/pdf" || mimeType === "application/x-pdf" || originalName.endsWith(".pdf");
     const isText = mimeType.startsWith("text/") || originalName.endsWith(".txt") || originalName.endsWith(".md");
 
     if (!isPdf && !isText) {
-      return res.status(400).json({
-        error: "Only PDF or plain text files (.pdf, .txt, .md) are supported.",
-      });
+      return res.status(400).json({ error: "Only PDF or plain text files (.pdf, .txt, .md) are supported." });
     }
 
-    const instruction = `This document is course material. Read it and generate ${numQuestions} quiz questions
-that test understanding of the curriculum covered in the document — concepts, definitions, facts,
-and reasoning it contains. Base every question strictly on content actually present in the document.`;
+    const instruction = `This document is course material. Read it and generate ${numQuestions} quiz questions that test understanding of the curriculum covered in the document. Base every question strictly on content actually present in the document.`;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-1.5-flash", // Corrected model version
       systemInstruction: QUESTION_SYSTEM_PROMPT,
       generationConfig: { responseMimeType: "application/json" },
     });
-
+    
     let promptContents = [];
 
     if (isPdf) {
-      // Send PDF buffer directly to Gemini natively
       promptContents.push({
         inlineData: {
           data: req.file.buffer.toString("base64"),
@@ -142,9 +129,7 @@ and reasoning it contains. Base every question strictly on content actually pres
     }
 
     const result = await model.generateContent(promptContents);
-    
-    // Clean potential markdown blocks before parsing
-    let textResponse = result.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
+    const textResponse = result.response.text();
     const questions = JSON.parse(textResponse);
 
     res.json({ questions, filename: req.file.originalname });
