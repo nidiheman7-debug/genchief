@@ -2817,7 +2817,28 @@ body {
       quizScreen.style.display   = w==="quiz"   ? "block":"none";
       scoreScreen.style.display  = w==="score"  ? "block":"none";
     }
+// Function to clean LaTeX dollar signs and formatting from text
+function cleanText(str) {
+  if (typeof str !== 'string') return str;
+  return str
+    .replace(/\$\$/g, '')      // Removes double dollar signs ($$)
+    .replace(/\$/g, '')       // Removes single dollar signs ($)
+    .replace(/\\lfloor/g, '⌊') // Optional: convert LaTeX floor/ceiling to clean Unicode
+    .replace(/\\rfloor/g, '⌋')
+    .replace(/\\ceil/g, '⌈')
+    .replace(/\\rceil/g, '⌉');
+}
 
+// Apply it when parsing/mapping incoming questions from server:
+function sanitizeQuestions(questions) {
+  return questions.map(q => ({
+    ...q,
+    text: cleanText(q.text),
+    options: q.options ? q.options.map(opt => cleanText(opt)) : [],
+    explanation: cleanText(q.explanation)
+  }));
+}
+    
     function buildGrid() {
       const grid = document.getElementById("course-grid");
       grid.innerHTML = "";
