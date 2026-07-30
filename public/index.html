@@ -208,17 +208,50 @@ body {
     </svg>
   </button>
     <div class="masthead">
-      <div class="masthead-label"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="42" height="42" style="vertical-align: middle; margin-bottom: 8px;">
+      <div class="masthead-label"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="120" height="120">
   <defs>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,700&amp;display=swap');
-      .badge-bg { fill: #c44d34; }
-      .logo-text { font-family: 'Playfair Display', Georgia, serif; font-weight: bold; font-style: italic; font-size: 38px; fill: #fdfbf7; text-anchor: middle; dominant-baseline: central; }
+      .bolt { fill: #c44d34; stroke: #c44d34; stroke-width: 2; stroke-linejoin: miter; }
+      .bolt-cutout { fill: black; stroke: black; stroke-width: 26; stroke-linejoin: miter; }
+      
+      .arc-left { fill: none; stroke: #c44d34; stroke-width: 16; stroke-linecap: round; }
+      .swoosh-left { fill: none; stroke: #c44d34; stroke-width: 5; stroke-linecap: round; }
+      
+      .arc-right { fill: none; stroke: #1a1a1a; stroke-width: 16; stroke-linecap: round; }
+      .swoosh-right { fill: none; stroke: #1a1a1a; stroke-width: 5; stroke-linecap: round; }
+      
+      /* Automatically switches the right side to cream in Dark Mode */
+      @media (prefers-color-scheme: dark) {
+        .arc-right, .swoosh-right { stroke: #fdfbf7; }
+      }
     </style>
+    
+    <!-- Mask to automatically cut a perfectly uniform gap around the bolt -->
+    <mask id="gap-mask">
+      <rect width="200" height="200" fill="white" />
+      <polygon points="112,12 62,110 108,110 92,192 142,95 98,95" class="bolt-cutout" />
+    </mask>
   </defs>
-  <circle cx="50" cy="50" r="48" class="badge-bg"/>
-  <text x="50" y="53" class="logo-text">JH7</text>
+
+  <!-- Group rotated slightly for a more energetic, forward-leaning angle -->
+  <g transform="rotate(12 100 100)">
+    
+    <!-- Left Side: Solid Terracotta Arcs -->
+    <path class="arc-left" d="M 100,16 A 84 84 0 0 0 100,184" />
+    <path class="swoosh-left" d="M 52,52 A 68 68 0 0 0 52,148" />
+    
+    <!-- Right Side: Responsive Charcoal/Cream Arcs, masked for separation -->
+    <g mask="url(#gap-mask)">
+      <path class="arc-right" d="M 100,16 A 84 84 0 0 1 100,184" />
+      <path class="swoosh-right" d="M 148,148 A 68 68 0 0 0 148,52" />
+    </g>
+
+    <!-- Center Lightning Bolt -->
+    <polygon points="112,12 62,110 108,110 92,192 142,95 98,95" class="bolt" />
+    
+  </g>
       </svg>
+        
         
       </div>
       <h1 class="masthead-title">Choose a<br><em>Course</em> to Begin</h1>
