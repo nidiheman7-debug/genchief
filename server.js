@@ -47,7 +47,13 @@ Respond with ONLY a raw JSON array matching this exact structure:
   }
 ]
 For "tf" (True/False) questions, set type to "tf" and options strictly to ["True", "False"].
-Mix "mcq" and "tf" types. Keep questions accurate, unambiguous, and appropriately challenging.`;
+Mix "mcq" and "tf" types. Keep questions accurate, unambiguous, and appropriately challenging.
+IMPORTANT: Never use LaTeX or Markdown math syntax (no $, \\(, \\[, \\frac, \\lim, \\int, \\sqrt, ^{}, _{}, etc). Write all mathematical expressions in plain text using standard keyboard characters instead, for example:
+- "lim(x→0) (e^(2x) + e^x - 2) / (e^x - 1)" instead of "$\\lim_{x \\to 0} \\frac{e^{2x}+e^x-2}{e^x-1}$"
+- "x^2 + 3x - 4" instead of "$x^2+3x-4$"
+- "√(x + 1)" instead of "$\\sqrt{x+1}$"
+- "∫ x dx" instead of "$\\int x\\,dx$"
+This applies to question text, options, and explanations.`;
 
 // ── 1. Generate Quiz from Topic ──
 app.post("/api/generate-quiz", async (req, res) => {
@@ -151,4 +157,5 @@ app.listen(PORT, () => {
   console.log(`Uniquiz Gemini server running on port ${PORT}`);
 });
         
-  
+
+    
