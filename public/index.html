@@ -99,6 +99,15 @@ body {
   color: var(--cream);
   border-color: var(--ink);
 }
+    .app-logo {
+  position: absolute;
+  top: 5px;
+  left: 8px;
+  width: 32px;
+  height: 32px;
+  z-index: 1000;
+  border-radius: 22%;
+    }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     button { font: inherit; border: none; background: none; cursor: pointer; }
 
@@ -331,6 +340,11 @@ body {
   </style>
 </head>
 <body>
+  <div id="course-screen">
+    <svg id="app-logo" class="app-logo" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="512" height="512" rx="112" fill="#C8432A"/>
+      <text x="256" y="345" text-anchor="middle" font-family="'Playfair Display', Georgia, serif" font-weight="900" font-size="330" fill="#F7F4EF">&#937;</text>
+    </svg>
   <div id="course-screen">
     <button id="account-badge-btn" class="account-badge-btn" title="Account" onclick="navGo('signin')">
       <svg id="account-badge-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.5-4 5-5.5 7.5-5.5s6 1.5 7.5 5.5"/></svg>
