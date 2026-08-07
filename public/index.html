@@ -13,7 +13,12 @@
 <meta name="google-site-verification" content="google14cc64f9848e3173">
 <!-- Ensure Google Crawlers Are Allowed -->
 <meta name="robots" content="index, follow">
-
+<!-- Place inside your <header> or main UI -->
+<button id="pwa-install-btn" style="display: none;">📲 Install App</button>
+<div id="ios-install-notice" style="display: none; background: #f0f4f8; padding: 10px; border-radius: 8px;">
+  <p>To install on iPhone: tap <strong>Share</strong> in Safari and select <strong>"Add to Home Screen"</strong>.</p>
+</div>
+  
 <!-- PWA: installable app support -->
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#C8432A">
@@ -3736,7 +3741,43 @@ themeToggler.addEventListener("click", () => {
     localStorage.setItem("selectedTheme", "light");
   }
 });
+let deferredPrompt;
+const installBtn = document.getElementById('pwa-install-btn');
+const iosNotice = document.getElementById('ios-install-notice');
 
+// Check if running on iOS Safari
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+
+// Display manual instructions for iOS users if not already installed
+if (isIOS && !isStandalone && iosNotice) {
+  iosNotice.style.display = 'block';
+}
+
+// Android/Chrome event listener
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  if (installBtn) installBtn.style.display = 'inline-block';
+});
+
+if (installBtn) {
+  installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      installBtn.style.display = 'none';
+    }
+    deferredPrompt = null;
+  });
+}
+
+window.addEventListener('appinstalled', () => {
+  if (installBtn) installBtn.style.display = 'none';
+  if (iosNotice) iosNotice.style.display = 'none';
+});
+    
 // Immediately initialize user theme preference checks on bootup routines
 if (localStorage.getItem("selectedTheme") === "dark") {
   document.body.classList.add("dark-theme");
