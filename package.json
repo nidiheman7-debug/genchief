@@ -1,7 +1,7 @@
 {
   "name": "omega-prep",
   "version": "1.0.0",
-  "description": "University quiz app with AI-generated questions",
+  "description": "Academic quiz app with AI-generated questions",
   "type": "module",
   "main": "server.js",
   "scripts": {
