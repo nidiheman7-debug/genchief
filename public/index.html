@@ -3892,47 +3892,50 @@ function sanitizeQuestions(questions) {
       if (!auth || !auth.currentUser) return null;
       return auth.currentUser.getIdToken();
     }
+async function getAuthToken() {
+  if (!auth || !auth.currentUser) return null;
+  try {
+    return await auth.currentUser.getIdToken();
+  } catch (err) {
+    console.error("Couldn't get a fresh sign-in token:", err);
+    return null;
+  }
+}
 
-    async function refreshUsageDisplay() {
-      const usageEl = document.getElementById("usage-indicator");
-      if (!usageEl) return;
-      const token = await getAuthToken();
-      if (!token) { usageEl.textContent = "Sign in to generate quizzes — 5 free every day."; return; }
-      try {
-        const res = await fetch("/api/usage", { headers: { Authorization: `Bearer ${token}` } });
-        const data = await res.json();
-        if (!res.ok) { usageEl.textContent = ""; return; }
-        if (data.remainingFree > 0) {
-          usageEl.textContent = `${data.remainingFree} free generation${data.remainingFree===1?"":"s"} left today` + (data.credits > 0 ? ` · ${data.credits} credits` : "");
-        } else if (data.credits > 0) {
-          usageEl.textContent = `Free generations used for today · ${data.credits} credits available`;
-        } else {
-          usageEl.textContent = `Free generations used for today — buy more to keep going`;
-        }
-      } catch (e) {
-        usageEl.textContent = "";
-      }
+async function refreshUsageDisplay() {
+  const usageEl = document.getElementById("usage-indicator");
+  if (!usageEl) return;
+
+  if (!auth || !auth.currentUser) {
+    usageEl.textContent = "Sign in to generate quizzes — 5 free every day.";
+    return;
+  }
+
+  const token = await getAuthToken();
+  if (!token) {
+    usageEl.textContent = "Couldn't verify your sign-in — check your connection and try again.";
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/usage", { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+    if (!res.ok) { usageEl.textContent = "Couldn't check your usage right now."; return; }
+    if (data.remainingFree > 0) {
+      usageEl.textContent = `${data.remainingFree} free generation${data.remainingFree===1?"":"s"} left today` + (data.credits > 0 ? ` · ${data.credits} credits` : "");
+    } else if (data.credits > 0) {
+      usageEl.textContent = `Free generations used for today · ${data.credits} credits available`;
+    } else {
+      usageEl.textContent = `Free generations used for today — buy more to keep going`;
     }
+  } catch (e) {
+    usageEl.textContent = "Couldn't check your usage — check your connection.";
+  }
+}
+    
 
     async function buyMoreGenerations() {
-      const token = await getAuthToken();
-      if (!token) { navGo("signin"); return; }
-      const btn = document.getElementById("buy-credits-btn");
-      if (btn) { btn.disabled = true; btn.textContent = "Starting checkout…"; }
-      try {
-        const res = await fetch("/api/paystack/initialize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Couldn't start payment.");
-        window.location.href = data.authorizationUrl;
-      } catch (err) {
-        alert(err.message || "Couldn't start payment. Try again.");
-        if (btn) { btn.disabled = false; btn.textContent = "Buy More Generations"; }
-      }
-    }
-
+      
     // Catches the redirect back from Paystack after payment and confirms the credit
     // Waits for Firebase to finish restoring the signed-in session on page load,
     // instead of checking auth.currentUser immediately (which is often still null
