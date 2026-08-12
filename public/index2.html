@@ -1,0 +1,1605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Omega Prep</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<!-- Page Title & Search Description -->
+<title>Omega Prep - AI Quiz & Practice Question Generator</title>
+<meta name="description" content="Generate practice quizzes and test questions instantly from topics or uploaded lecture PDFs. Built for university students.">
+<meta name="keywords" content="Omega Prep, AI quiz generator, university study tool, PDF quiz maker, exam practice">
+<meta name="google-site-verification" content="google14cc64f9848e3173">
+<!-- Ensure Google Crawlers Are Allowed -->
+<meta name="robots" content="index, follow">
+  
+  <style>
+    :root {
+      --cream:  #F7F4EF;
+      --ink:    #1C1C1C;
+      --muted:  #888;
+      --rule:   #D4CFC8;
+      --accent: #C8432A;
+      --correct:#2D6A4F;
+      --wrong:  #C1121F;
+      --cor-bg: #EAF4EE;
+      --wrg-bg: #FDECEA;
+      --serif:  'Playfair Display', Georgia, serif;
+      --sans:   'DM Sans', 'Helvetica Neue', sans-serif;
+    }
+    /* 1. Clear color overrides for the dark theme */
+body.dark-theme {
+  --cream:  #121212;  /* Deep dark background */
+  --ink:    #F5F5F5;  /* Light text */
+  --muted:  #A0A0A0;  /* Secondary text */
+  --rule:   #2A2A2A;  /* Dark subtle borders */
+  
+  /* Retain correct/wrong accent visibility but deepen background tints */
+  --cor-bg: #1B3B2B;  
+  --wrg-bg: #421C1F;
+}
+
+/* 2. Add smooth theme transition animations directly to your body */
+body {
+  background-color: var(--cream);
+  color: var(--ink);
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+  position: relative; /* Gives the toggle absolute alignment reference context */
+}
+
+.theme-toggle-btn {
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--ink);
+  padding: 8px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  transition: all 0.2s ease;
+}
+
+.theme-toggle-btn:hover {
+  background-color: var(--rule);
+}
+
+.account-badge-btn {
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--ink);
+  padding: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  transition: all 0.2s ease;
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 700;
+}
+.account-badge-btn:hover { background-color: var(--rule); }
+.account-badge-btn.signed-in {
+  background: var(--ink);
+  color: var(--cream);
+  border-color: var(--ink);
+}
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    button { font: inherit; border: none; background: none; cursor: pointer; }
+
+    body {
+      font-family: var(--serif);
+      background: var(--cream);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 76px 0 60px;
+    }
+
+    /* ── Top header bar (mirrors the bottom nav) ── */
+    .app-header {
+      position: fixed; top: 0; left: 0; width: 100%; z-index: 900;
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--cream); border-bottom: 1px solid var(--rule);
+      padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+      box-sizing: border-box;
+    }
+    .app-header-logo { display: flex; align-items: center; }
+    .app-header-logo-svg { height: 28px; width: auto; display: block; }
+    .app-header-actions { display: flex; align-items: center; gap: 8px; }
+
+    /* ── Course picker ── */
+    #course-screen { width:100%; max-width:700px; padding:48px 24px; animation:fadeUp .5s ease both; }
+
+    .masthead { border-bottom:2px solid var(--ink); padding-bottom:16px; margin-bottom:48px; }
+    .masthead-label { font-family:var(--sans); font-size:10px; font-weight:700; letter-spacing:6px; text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
+    .masthead-title { font-family:var(--serif); font-size:clamp(32px,7vw,52px); font-weight:900; line-height:1.1; color:var(--ink); }
+    .masthead-title em { font-style:italic; color:var(--accent); }
+
+    .course-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:16px; }
+
+    .course-card {
+      border:1px solid var(--rule); padding:24px 20px; text-align:left;
+      background:transparent; transition:border-color .2s, transform .2s, box-shadow .2s;
+      position:relative; overflow:hidden;
+    }
+    .course-card::before {
+      content:""; position:absolute; top:0; left:0;
+      width:3px; height:0; background:var(--accent); transition:height .25s ease;
+    }
+    .course-card:hover { border-color:var(--ink); transform:translateY(-3px); box-shadow:0 8px 24px rgba(0,0,0,.07); }
+    .course-card:hover::before { height:100%; }
+    .course-code { font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:4px; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
+    .course-name { font-family:var(--serif); font-size:18px; color:var(--ink); line-height:1.35; }
+    .course-meta { font-family:var(--sans); font-size:12px; color:var(--muted); margin-top:12px; }
+
+    /* ── Quiz screen ── */
+    #quiz-screen { display:none; width:100%; max-width:660px; padding:0 24px; }
+
+    .quiz-nav {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:20px 0 14px; margin-bottom:36px; border-bottom:2px solid var(--ink);
+    }
+    .back-btn { font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:var(--muted); transition:color .2s; }
+    .back-btn:hover { color:var(--ink); }
+    .nav-course-code { font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:5px; text-transform:uppercase; color:var(--ink); }
+    .nav-progress { font-family:var(--sans); font-size:11px; color:var(--muted); letter-spacing:2px; }
+
+    .dots-row { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:36px; }
+    .dot { width:8px; height:8px; border-radius:50%; background:var(--rule); transition:background .3s; }
+    .dot.done { background:var(--ink); }
+    .dot.current { background:var(--accent); }
+
+    .ghost-num { font-family:var(--serif); font-size:clamp(80px,20vw,120px); font-weight:900; color:#EDE9E3; line-height:.85; margin-bottom:-18px; user-select:none; }
+
+    .type-badge {
+      display:inline-block; font-family:var(--sans); font-size:10px; font-weight:700;
+      letter-spacing:3px; text-transform:uppercase; color:var(--cream);
+      background:var(--ink); padding:4px 10px; margin-bottom:14px; position:relative; z-index:1;
+    }
+
+    .q-text { font-size:clamp(18px,3.5vw,24px); line-height:1.5; color:var(--ink); margin-bottom:32px; position:relative; z-index:1; }
+    .hint-btn {
+      font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:1px;
+      color:var(--accent); border:1px solid var(--accent); background:transparent;
+      padding:8px 16px; cursor:pointer; transition:background .2s, color .2s;
+    }
+    .hint-btn:hover { background:var(--accent); color:var(--cream); }
+    .hint-text {
+      font-family:var(--sans); font-size:13.5px; line-height:1.6; color:var(--muted);
+      background:rgba(200,67,42,.07); border-left:3px solid var(--accent);
+      padding:12px 14px; margin-top:10px;
+    }
+
+    .options { list-style:none; }
+    .opt-btn {
+      width:100%; background:transparent; border:none; border-bottom:1px solid var(--rule);
+      padding:16px 0; display:flex; align-items:center; gap:18px; text-align:left; transition:background .18s;
+    }
+    .options li:first-child .opt-btn { border-top:1px solid var(--rule); }
+    .opt-btn:hover:not(:disabled) { background:rgba(0,0,0,.025); }
+    .opt-btn:disabled { cursor:default; }
+    .opt-letter { font-family:var(--sans); font-size:10px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:var(--muted); width:24px; flex-shrink:0; transition:color .2s; }
+    .opt-label  { font-family:var(--serif); font-size:17px; color:#555; flex:1; transition:color .2s; }
+    .opt-icon   { font-size:16px; width:18px; text-align:center; opacity:0; transition:opacity .2s; }
+
+    .opt-btn.selected .opt-letter { color:var(--ink); }
+    .opt-btn.selected .opt-label  { color:var(--ink); font-weight:600; }
+    .opt-btn.selected .opt-icon   { opacity:1; }
+
+    .opt-btn.correct { background:var(--cor-bg); }
+    .opt-btn.correct .opt-letter,
+    .opt-btn.correct .opt-label,
+    .opt-btn.correct .opt-icon { color:var(--correct); }
+    .opt-btn.correct .opt-icon { opacity:1; }
+
+    .opt-btn.wrong { background:var(--wrg-bg); }
+    .opt-btn.wrong .opt-letter,
+    .opt-btn.wrong .opt-label,
+    .opt-btn.wrong .opt-icon { color:var(--wrong); }
+    .opt-btn.wrong .opt-icon { opacity:1; }
+
+    .footer {
+      margin-top:28px; display:flex; justify-content:flex-end; align-items:center;
+      gap:20px; min-height:52px; border-top:1px solid var(--rule); padding-top:20px;
+    }
+    .submit-btn {
+      background:var(--ink); color:var(--cream); font-family:var(--sans); font-size:11px;
+      font-weight:700; letter-spacing:3px; text-transform:uppercase; padding:13px 32px;
+      transition:background .2s, transform .15s;
+    }
+    .submit-btn:hover { background:#333; transform:translateY(-1px); }
+    .result-msg { font-family:var(--sans); font-size:12px; font-weight:600; letter-spacing:1px; line-height:1.5; flex:1; animation:fadeUp .3s ease; }
+    .result-msg.correct { color:var(--correct); }
+    .result-msg.wrong   { color:var(--wrong); }
+    .next-btn { font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:3px; text-transform:uppercase; color:var(--muted); text-decoration:underline; flex-shrink:0; transition:color .2s; }
+    .next-btn:hover { color:var(--ink); }
+
+    /* ── Score screen ── */
+    #score-screen { display:none; width:100%; max-width:660px; padding:48px 24px; animation:fadeUp .5s ease both; }
+    .score-header { border-bottom:2px solid var(--ink); padding-bottom:16px; margin-bottom:40px; }
+    .score-label  { font-family:var(--sans); font-size:10px; font-weight:700; letter-spacing:6px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+    .score-course { font-family:var(--serif); font-size:28px; font-weight:700; color:var(--ink); }
+    .score-big    { font-family:var(--serif); font-size:clamp(72px,20vw,110px); font-weight:900; line-height:1; color:var(--ink); margin-bottom:4px; }
+    .score-sub    { font-family:var(--sans); font-size:14px; color:var(--muted); margin-bottom:28px; letter-spacing:1px; }
+    .grade-pill   { display:inline-block; padding:8px 20px; margin-bottom:40px; }
+    .score-actions { display:flex; gap:16px; flex-wrap:wrap; }
+    .action-btn   { font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:3px; text-transform:uppercase; padding:13px 28px; transition:background .2s, transform .15s; }
+    .action-btn.primary   { background:var(--ink); color:var(--cream); }
+    .action-btn.primary:hover { background:#333; transform:translateY(-1px); }
+    .action-btn.secondary { border:1px solid var(--rule); color:var(--ink); }
+    .action-btn.secondary:hover { border-color:var(--ink); }
+
+    @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+    .quiz-animate { animation:fadeUp .4s ease both; }
+
+    /* ── Bottom navigation ── */
+    body { padding-bottom: 78px; }
+    .bottom-nav {
+      position:fixed; bottom:0; left:0; width:100%; z-index:900;
+      display:flex; justify-content:space-around; align-items:stretch;
+      background:var(--cream); border-top:1px solid var(--rule);
+      padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+    }
+    .nav-item {
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:4px; flex:1; padding:6px 2px; font-family:var(--sans);
+      font-size:9.5px; font-weight:600; letter-spacing:.5px; text-transform:uppercase;
+      color:var(--muted); transition:color .2s;
+    }
+    .nav-item svg { width:20px; height:20px; stroke:currentColor; transition:stroke .2s; }
+    .nav-item.active { color:var(--accent); }
+    .nav-item:hover { color:var(--ink); }
+    .nav-item.active:hover { color:var(--accent); }
+
+    /* ── Simple sub-screens (Stats / History / Sign in / About) ── */
+    .sub-screen { display:none; width:100%; max-width:660px; padding:48px 24px; animation:fadeUp .5s ease both; }
+    .sub-header { border-bottom:2px solid var(--ink); padding-bottom:16px; margin-bottom:36px; }
+    .sub-label  { font-family:var(--sans); font-size:10px; font-weight:700; letter-spacing:6px; text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
+    .sub-title  { font-family:var(--serif); font-size:clamp(28px,6vw,42px); font-weight:900; color:var(--ink); }
+
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:16px; margin-bottom:8px; }
+    .stat-card  { border:1px solid var(--rule); padding:20px; }
+    .stat-num   { font-family:var(--serif); font-size:clamp(30px,6vw,40px); font-weight:900; color:var(--ink); line-height:1; margin-bottom:6px; }
+    .stat-lbl   { font-family:var(--sans); font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--muted); }
+
+    .hist-header { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; }
+    .hist-header-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .clear-all-btn, .select-toggle-btn, .delete-selected-btn {
+      font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+      background:none; border:1px solid var(--rule); padding:9px 14px; cursor:pointer;
+      white-space:nowrap; transition:color .2s, border-color .2s, background .2s;
+    }
+    .clear-all-btn { color:var(--muted); }
+    .clear-all-btn:hover { color:#C1121F; border-color:#C1121F; }
+    .select-toggle-btn { color:var(--ink); }
+    .select-toggle-btn.active { background:var(--ink); color:var(--cream); border-color:var(--ink); }
+    .delete-selected-btn { color:#fff; background:#C1121F; border-color:#C1121F; }
+    .delete-selected-btn:disabled { opacity:.4; cursor:not-allowed; }
+    .hist-checkbox {
+      width:18px; height:18px; flex-shrink:0; accent-color:var(--accent); cursor:pointer;
+    }
+    .hist-delete-btn {
+      background:none; border:none; cursor:pointer; color:var(--muted); font-size:16px;
+      line-height:1; padding:4px 2px; transition:color .2s;
+    }
+    .hist-delete-btn:hover { color:#C1121F; }
+    .history-list { list-style:none; }
+    .history-item { border-bottom:1px solid var(--rule); }
+    .history-item:first-child { border-top:1px solid var(--rule); }
+    .hist-row { padding:16px 0; display:flex; justify-content:space-between; align-items:center; gap:12px; cursor:pointer; }
+    .history-item.selected { background:rgba(196,77,52,0.06); }
+    .hist-course { font-family:var(--serif); font-size:16px; color:var(--ink); }
+    .hist-date   { font-family:var(--sans); font-size:11px; color:var(--muted); margin-top:4px; }
+    .hist-score-wrap { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+    .hist-score  { font-family:var(--sans); font-size:13px; font-weight:700; color:var(--ink); }
+    .hist-chevron { font-size:11px; color:var(--muted); transition:transform .2s; }
+    .history-item.open .hist-chevron { transform:rotate(180deg); }
+    .hist-details { display:none; padding:0 0 20px; }
+    .history-item.open .hist-details { display:block; }
+    .hist-q { border-top:1px solid var(--rule); padding:14px 0; }
+    .hist-q-num { font-family:var(--sans); font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+    .hist-q-text { font-family:var(--serif); font-size:14px; color:var(--ink); margin-bottom:8px; line-height:1.5; }
+    .hist-q-answer { font-family:var(--sans); font-size:12.5px; margin-bottom:3px; }
+    .hist-q-answer.right { color:#2D6A4F; }
+    .hist-q-answer.wrong { color:#C1121F; }
+    .hist-q-correct { font-family:var(--sans); font-size:12.5px; color:var(--muted); }
+    .hist-q-explain { font-family:var(--sans); font-size:12px; color:var(--muted); margin-top:6px; font-style:italic; }
+    .empty-note  { font-family:var(--sans); font-size:13px; color:var(--muted); }
+
+    .signin-form { display:flex; flex-direction:column; gap:14px; max-width:360px; }
+    .signin-form input {
+      font-family:var(--sans); font-size:14px; padding:13px 14px;
+      border:1px solid var(--rule); background:transparent; color:var(--ink);
+    }
+    .signin-note { font-family:var(--sans); font-size:12px; color:var(--muted); margin-top:14px; max-width:360px; }
+    .signin-error { font-family:var(--sans); font-size:12.5px; color:var(--wrong); margin-top:12px; min-height:16px; max-width:360px; }
+    .signin-toggle { font-family:var(--sans); font-size:13px; color:var(--muted); margin-top:18px; }
+    .signin-toggle-btn { color:var(--accent); font-weight:700; text-decoration:underline; margin-left:6px; }
+    .google-btn {
+      display:flex; align-items:center; justify-content:center; gap:10px;
+      width:100%; max-width:360px; margin-top:14px;
+      font-family:var(--sans); font-size:13px; font-weight:600;
+      padding:12px 0; border:1px solid var(--rule); background:transparent; color:var(--ink);
+      transition:border-color .2s, background .2s;
+    }
+    .google-btn:hover { border-color:var(--ink); background:rgba(0,0,0,.03); }
+    .account-card { display:flex; align-items:center; gap:14px; }
+    .account-avatar {
+      width:48px; height:48px; border-radius:50%; background:var(--ink); color:var(--cream);
+      display:flex; align-items:center; justify-content:center;
+      font-family:var(--serif); font-size:18px; font-weight:700; flex-shrink:0;
+    }
+    .account-email { font-family:var(--sans); font-size:15px; color:var(--ink); font-weight:600; }
+    .account-sub { font-family:var(--sans); font-size:12px; color:var(--muted); margin-top:2px; }
+
+    .about-text { font-family:var(--sans); font-size:14px; line-height:1.8; color:var(--ink); max-width:560px; }
+    .about-text p { margin-bottom:16px; }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-logo">
+      <svg class="app-header-logo-svg" viewBox="0 0 300 64" xmlns="http://www.w3.org/2000/svg">
+        <text x="0" y="50" font-family="'Playfair Display', Georgia, serif" font-weight="900" font-size="56" fill="#C8432A">&#937;</text>
+        <text x="58" y="46" font-family="'Playfair Display', Georgia, serif" font-weight="700" font-size="34" fill="var(--ink)">Omega Prep</text>
+      </svg>
+    </div>
+    <div class="app-header-actions">
+      <button id="account-badge-btn" class="account-badge-btn" title="Account" onclick="navGo('signin')">
+        <svg id="account-badge-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.5-4 5-5.5 7.5-5.5s6 1.5 7.5 5.5"/></svg>
+        <span id="account-badge-initial" style="display:none;"></span>
+      </button>
+      <button id="theme-toggle" class="theme-toggle-btn" title="Toggle Theme">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+  <div id="course-screen">
+    <div class="masthead">
+      <div class="masthead-label">Omega Prep &middot; AI Study Prep</div>
+      <h1 class="masthead-title">Generate a <em>Quiz</em><br>in Seconds</h1>
+    </div>
+    <div id="ai-generate-block" style="margin-top:0; padding-top:0;">
+      <div class="masthead-label" style="margin-bottom:14px; display:flex; align-items:center; gap:8px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="m12 2 1.9 5.8L20 10l-6.1 2.2L12 18l-1.9-5.8L4 10l6.1-2.2Z"/><path d="M19 15l.7 2.1L22 18l-2.3.9L19 21l-.7-2.1L16 18l2.3-.9Z"/></svg>
+        Generate a Quiz with AI
+      </div>
+      <div id="usage-indicator" style="font-family:var(--sans); font-size:12px; color:var(--muted); margin-bottom:14px;">Sign in to generate quizzes — 5 free every day.</div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <input id="ai-topic-input" type="text" placeholder="Enter any topic e.g. World War II, Python loops, Cell Biology"
+          style="flex:1; min-width:220px; font-family:var(--sans); font-size:14px; padding:12px 14px; border:1px solid var(--rule); background:transparent; color:var(--ink);" />
+        <input id="ai-count-input" type="number" min="3" max="25" value="8" title="Number of questions"
+          style="width:70px; font-family:var(--sans); font-size:14px; padding:12px 10px; border:1px solid var(--rule); background:transparent; color:var(--ink);" />
+        <button id="ai-generate-btn" class="submit-btn" style="padding:12px 28px;">Generate</button>
+        <button id="buy-credits-btn" type="button" onclick="buyMoreGenerations()" style="padding:12px 20px; font-family:var(--sans); font-size:11px; font-weight:700; letter-spacing:1px; color:var(--accent); border:1px solid var(--accent); background:transparent; cursor:pointer;">Buy More Generations</button>
+      </div>
+      <div id="ai-status" style="font-family:var(--sans); font-size:12px; color:var(--muted); margin-top:12px;"></div>
+    </div>
+
+    <div id="ai-file-block" style="margin-top:32px; border-top:1px solid var(--rule); padding-top:32px;">
+      <div class="masthead-label" style="margin-bottom:14px; display:flex; align-items:center; gap:8px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></svg>
+        Upload Course Material
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+        <input id="ai-file-input" type="file" accept=".pdf,.txt,.md,text/plain,application/pdf"
+          style="flex:1; min-width:220px; font-family:var(--sans); font-size:13px; color:var(--ink);" />
+        <input id="ai-file-count-input" type="number" min="3" max="25" value="10" title="Number of questions"
+          style="width:70px; font-family:var(--sans); font-size:14px; padding:12px 10px; border:1px solid var(--rule); background:transparent; color:var(--ink);" />
+        <button id="ai-file-generate-btn" class="submit-btn" style="padding:12px 28px;">Analyse &amp; Generate</button>
+      </div>
+      <div class="course-meta" style="margin-top:8px;">PDF or plain text (.txt, .md), up to 20MB. Questions are drawn only from the file's content.</div>
+      <div id="ai-file-status" style="font-family:var(--sans); font-size:12px; color:var(--muted); margin-top:12px;"></div>
+    </div>
+
+    <div id="course-grid-block" style="margin-top:40px; border-top:1px solid var(--rule); padding-top:32px;">
+      <div class="masthead-label" style="margin-bottom:14px;">Quizzes You've Done</div>
+      <div id="done-quizzes-empty" class="empty-note" style="display:none;">Finish a quiz above and it'll show up here so you can take it again anytime.</div>
+      <div id="done-quizzes-signin-note" class="empty-note" style="display:none;">Sign in to see quizzes you've completed here.</div>
+      <div class="course-grid" id="course-grid"></div>
+    </div>
+  </div>
+
+  <div id="quiz-screen">
+    <div class="quiz-nav">
+      <button class="back-btn" onclick="goHome()">&#8592; Courses</button>
+      <span class="nav-course-code" id="nav-code"></span>
+      <span class="nav-progress" id="nav-progress"></span>
+    </div>
+    <div class="dots-row" id="dots-row"></div>
+    <div class="ghost-num" id="ghost-num"></div>
+    <span class="type-badge" id="type-badge"></span>
+    <p class="q-text" id="q-text"></p>
+    <div id="hint-row" style="display:none; margin:-8px 0 20px;">
+      <button id="hint-btn" class="hint-btn" onclick="toggleHint()">💡 Show Hint</button>
+      <div id="hint-text" class="hint-text" style="display:none;"></div>
+    </div>
+    <ul class="options" id="options-list"></ul>
+    <div class="footer" id="footer"></div>
+  </div>
+
+  <div id="score-screen">
+    <div class="score-header">
+      <div class="score-label" id="score-label"></div>
+      <div class="score-course" id="score-course"></div>
+    </div>
+    <div class="score-big" id="score-big"></div>
+    <div class="score-sub" id="score-sub"></div>
+    <div class="grade-pill" id="grade-pill"></div>
+    <div class="score-actions">
+      <button class="action-btn primary" onclick="retryQuiz()">Retry Quiz</button>
+      <button class="action-btn secondary" onclick="goHome()">All Courses</button>
+    </div>
+    <button class="action-btn secondary" id="more-questions-btn" style="display:none; margin-top:12px; width:100%;" onclick="generateMoreQuestions()">+ Generate More Questions</button>
+    <button class="action-btn secondary" id="share-quiz-btn" style="margin-top:12px; width:100%;" onclick="shareCurrentQuiz()">Share This Quiz</button>
+  </div>
+
+  <!-- ── Stats screen ── -->
+  <div id="stats-screen" class="sub-screen">
+    <div class="sub-header">
+      <div class="sub-label">Your Progress</div>
+      <div class="sub-title">Stats</div>
+    </div>
+    <div class="stats-grid" id="stats-grid"></div>
+  </div>
+
+  <!-- ── History screen ── -->
+  <div id="history-screen" class="sub-screen">
+    <div class="sub-header hist-header">
+      <div>
+        <div class="sub-label">Past Attempts</div>
+        <div class="sub-title">History</div>
+      </div>
+      <div class="hist-header-actions">
+        <button class="delete-selected-btn" id="delete-selected-btn" onclick="deleteSelectedHistory()" style="display:none;">Delete (0)</button>
+        <button class="select-toggle-btn" id="select-toggle-btn" onclick="toggleSelectMode()">Select</button>
+        <button class="clear-all-btn" id="clear-all-btn" onclick="clearAllHistory()">Clear All</button>
+      </div>
+    </div>
+    <ul class="history-list" id="history-list"></ul>
+  </div>
+
+  <!-- ── Sign in screen ── -->
+  <div id="signin-screen" class="sub-screen">
+    <div class="sub-header">
+      <div class="sub-label">Your Account</div>
+      <div class="sub-title" id="signin-title">Sign In</div>
+    </div>
+
+    <!-- Signed-out state -->
+    <div id="signin-form-wrap">
+      <form class="signin-form" id="signin-form">
+        <input id="signin-email" type="email" placeholder="Email address" required />
+        <input id="signin-password" type="password" placeholder="Password" required />
+        <button type="submit" class="submit-btn" id="signin-submit-btn" style="padding:13px 0;">Sign In</button>
+      </form>
+      <button type="button" class="google-btn" id="google-signin-btn">
+        <svg width="16" height="16" viewBox="0 0 48 48">
+          <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.6-6 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.4-.4-3.5z"/>
+          <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6 29.5 4 24 4 16 4 9.1 8.5 6.3 14.7z"/>
+          <path fill="#4CAF50" d="M24 44c5.3 0 10.1-2 13.7-5.4l-6.3-5.3C29.4 34.9 26.8 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9 39.5 15.9 44 24 44z"/>
+          <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.2-4 5.6l6.3 5.3C40.9 36.6 44 30.9 44 24c0-1.2-.1-2.4-.4-3.5z"/>
+        </svg>
+        Continue with Google
+      </button>
+      <div class="signin-toggle">
+        <span id="signin-toggle-text">Don't have an account?</span>
+        <button type="button" class="signin-toggle-btn" id="signin-toggle-btn">Sign Up</button>
+      </div>
+      <div class="signin-error" id="signin-error"></div>
+      <div class="signin-note" id="signin-note">Your quiz history is currently saved on this device. Signing in creates your account — syncing your history to it is coming soon.</div>
+    </div>
+
+    <!-- Signed-in state -->
+    <div id="signin-account-wrap" style="display:none;">
+      <div class="account-card">
+        <div class="account-avatar" id="account-avatar"></div>
+        <div>
+          <div class="account-email" id="account-email"></div>
+          <div class="account-sub">Signed in</div>
+        </div>
+      </div>
+      <button type="button" class="submit-btn" id="signout-btn" style="padding:13px 28px; margin-top:20px;">Sign Out</button>
+    </div>
+  </div>
+
+  <!-- ── About screen ── -->
+  <div id="about-screen" class="sub-screen">
+    <div class="sub-header">
+      <div class="sub-label">The Project</div>
+      <div class="sub-title">About Omega Prep</div>
+    </div>
+    <div class="about-text">
+      <p>Omega Prep helps university students practice for exams through short, focused quizzes — either from a curated course bank, generated instantly by AI from any topic, or built straight from your own lecture notes and PDFs.</p>
+      <p>Your quiz history and stats are stored locally on this device, so you can track your progress over time without needing an account.</p>
+      <p>Built for students, by students.</p>
+    </div>
+  </div>
+
+  <!-- ── Bottom navigation ── -->
+  <nav class="bottom-nav" id="bottom-nav">
+    <button class="nav-item active" data-screen="course" onclick="navGo('course')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="nav-item" data-screen="stats" onclick="navGo('stats')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M12 20V4"/><path d="M20 20v-7"/></svg>
+      <span>Stats</span>
+    </button>
+    <button class="nav-item" data-screen="history" onclick="navGo('history')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+      <span>History</span>
+    </button>
+    <button class="nav-item" data-screen="signin" onclick="navGo('signin')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.5-4 5-5.5 7.5-5.5s6 1.5 7.5 5.5"/></svg>
+      <span>Sign In</span>
+    </button>
+    <button class="nav-item" data-screen="about" onclick="navGo('about')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="8" r=".6" fill="currentColor" stroke="none"/></svg>
+      <span>About</span>
+    </button>
+  </nav>
+
+  <!-- Firebase Authentication SDK (compat build — no bundler needed) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <!-- Google Identity Services — the current official Google sign-in library.
+       Used instead of Firebase's signInWithPopup/signInWithRedirect, which route
+       through an intermediary firebaseapp.com page that's unreliable on mobile
+       Chrome for apps not hosted on Firebase Hosting. -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <script>
+    // Firebase project config — Omega Prep
+    const firebaseConfig = {
+      apiKey: "AIzaSyBxi_VnDUI70TlGHOJlJEz-q78uDwVFDbQ",
+      authDomain: "omega-prep.firebaseapp.com",
+      projectId: "omega-prep",
+      storageBucket: "omega-prep.firebasestorage.app",
+      messagingSenderId: "356659140508",
+      appId: "1:356659140508:web:18acd9c1b071f05fb81a59",
+      measurementId: "G-R199RJFYYC"
+    };
+    // Guard against the Firebase SDK failing to load (no network, blocked CDN, or config
+    // not filled in yet) so a sign-in problem never breaks the rest of the app.
+    let auth = null;
+    try {
+      if (typeof firebase !== "undefined") {
+        firebase.initializeApp(firebaseConfig);
+        auth = firebase.auth();
+      } else {
+        console.warn("Firebase SDK did not load — sign-in is disabled, rest of the app still works.");
+      }
+    } catch (e) {
+      console.warn("Firebase init failed — sign-in is disabled, rest of the app still works.", e);
+    }
+
+    const courses = []; // populated dynamically — AI generations, shared links, and completed quizzes
+
+    let activeCourse = null, qIndex = 0, selectedIdx = null, revealed = false, score = 0, quizAnswers = [];
+
+    const courseScreen  = document.getElementById("course-screen");
+    const quizScreen    = document.getElementById("quiz-screen");
+    const scoreScreen   = document.getElementById("score-screen");
+    const statsScreen   = document.getElementById("stats-screen");
+    const historyScreen = document.getElementById("history-screen");
+    const signinScreen  = document.getElementById("signin-screen");
+    const aboutScreen   = document.getElementById("about-screen");
+
+    function showScreen(w) {
+      courseScreen.style.display  = w==="course"  ? "block":"none";
+      quizScreen.style.display    = w==="quiz"    ? "block":"none";
+      scoreScreen.style.display   = w==="score"   ? "block":"none";
+      statsScreen.style.display   = w==="stats"   ? "block":"none";
+      historyScreen.style.display = w==="history" ? "block":"none";
+      signinScreen.style.display  = w==="signin"  ? "block":"none";
+      aboutScreen.style.display   = w==="about"   ? "block":"none";
+
+      // Keep the bottom nav's active state and visibility in sync
+      const navScreens = ["course","stats","history","signin","about"];
+      document.querySelectorAll(".nav-item").forEach(btn=>{
+        btn.classList.toggle("active", btn.dataset.screen===w);
+      });
+      const bottomNav = document.getElementById("bottom-nav");
+      bottomNav.style.display = navScreens.includes(w) ? "flex" : "none";
+    }
+
+    // ── Local quiz history / stats ──
+    function getHistory() {
+      try { return JSON.parse(localStorage.getItem("quizHistory")) || []; }
+      catch(e) { return []; }
+    }
+    function saveAttempt(record) {
+      const hist = getHistory();
+      hist.unshift(record);
+      localStorage.setItem("quizHistory", JSON.stringify(hist));
+    }
+    // Tracks how many AI questions have been generated in total (topic-based + file-based),
+    // independent of whether the resulting quiz was ever taken.
+    function getAIGeneratedCount() {
+      const n = parseInt(localStorage.getItem("aiQuestionsGenerated"), 10);
+      return isNaN(n) ? 0 : n;
+    }
+    function addAIGeneratedCount(n) {
+      const total = getAIGeneratedCount() + (parseInt(n, 10) || 0);
+      localStorage.setItem("aiQuestionsGenerated", String(total));
+    }
+    function renderStats() {
+      const hist = getHistory();
+      const grid = document.getElementById("stats-grid");
+      const aiGenerated = getAIGeneratedCount();
+      if (!hist.length) {
+        grid.innerHTML = `
+          <div class="empty-note">No quizzes taken yet — finish a quiz to see your stats here.</div>
+          <div class="stats-grid" style="margin-top:16px;">
+            <div class="stat-card"><div class="stat-num">${aiGenerated}</div><div class="stat-lbl">AI Questions Generated</div></div>
+          </div>
+        `;
+        return;
+      }
+      const totalQuizzes = hist.length;
+      const totalQuestions = hist.reduce((s,h)=>s+h.total,0);
+      const totalCorrect   = hist.reduce((s,h)=>s+h.score,0);
+      const avgPct = Math.round((totalCorrect/totalQuestions)*100);
+      const bestPct = Math.max(...hist.map(h=>h.pct));
+      grid.innerHTML = `
+        <div class="stat-card"><div class="stat-num">${totalQuizzes}</div><div class="stat-lbl">Quizzes Taken</div></div>
+        <div class="stat-card"><div class="stat-num">${avgPct}%</div><div class="stat-lbl">Average Score</div></div>
+        <div class="stat-card"><div class="stat-num">${bestPct}%</div><div class="stat-lbl">Best Score</div></div>
+        <div class="stat-card"><div class="stat-num">${totalQuestions}</div><div class="stat-lbl">Questions Answered</div></div>
+        <div class="stat-card"><div class="stat-num">${aiGenerated}</div><div class="stat-lbl">AI Questions Generated</div></div>
+      `;
+    }
+    let historySelectMode = false;
+    let selectedHistoryIdx = new Set();
+
+    function renderHistory() {
+      const hist = getHistory();
+      const list = document.getElementById("history-list");
+      const selectBtn = document.getElementById("select-toggle-btn");
+      const clearBtn = document.getElementById("clear-all-btn");
+      const deleteBtn = document.getElementById("delete-selected-btn");
+
+      if (!hist.length) {
+        list.innerHTML = '<div class="empty-note">No past attempts yet — your completed quizzes will show up here.</div>';
+        selectBtn.style.display = "none";
+        clearBtn.style.display = "none";
+        deleteBtn.style.display = "none";
+        return;
+      }
+      selectBtn.style.display = "inline-block";
+      clearBtn.style.display = historySelectMode ? "none" : "inline-block";
+      selectBtn.textContent = historySelectMode ? "Cancel" : "Select";
+      selectBtn.classList.toggle("active", historySelectMode);
+      deleteBtn.style.display = historySelectMode ? "inline-block" : "none";
+      deleteBtn.textContent = `Delete (${selectedHistoryIdx.size})`;
+      deleteBtn.disabled = selectedHistoryIdx.size === 0;
+
+      list.innerHTML = hist.map((h,i) => {
+        const dateStr = new Date(h.date).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+        const hasAnswers = Array.isArray(h.answers) && h.answers.length > 0;
+        const detailsHtml = hasAnswers
+          ? h.answers.map((a,qi) => {
+              const L = ["A","B","C","D"];
+              const selectedText = a.selectedIdx!=null && a.options[a.selectedIdx]!=null
+                ? `${L[a.selectedIdx]||""}. ${a.options[a.selectedIdx]}` : "No answer";
+              const correctText = `${L[a.correctIdx]||""}. ${a.options[a.correctIdx]}`;
+              return `
+                <div class="hist-q">
+                  <div class="hist-q-num">Question ${qi+1}</div>
+                  <div class="hist-q-text">${a.text}</div>
+                  <div class="hist-q-answer ${a.isRight?'right':'wrong'}">Your answer: ${selectedText} ${a.isRight?'\u2713':'\u2717'}</div>
+                  ${!a.isRight ? `<div class="hist-q-correct">Correct answer: ${correctText}</div>` : ""}
+                  ${a.explanation ? `<div class="hist-q-explain">${a.explanation}</div>` : ""}
+                </div>`;
+            }).join("")
+          : `<div class="hist-q"><div class="empty-note">Detailed question review isn't available for this older attempt.</div></div>`;
+
+        const rowClick = historySelectMode ? `toggleHistorySelect(${i})` : `toggleHistoryItem(${i})`;
+        const checkbox = historySelectMode
+          ? `<input type="checkbox" class="hist-checkbox" onclick="event.stopPropagation(); toggleHistorySelect(${i})" ${selectedHistoryIdx.has(i)?"checked":""} />`
+          : "";
+        const rightControls = historySelectMode
+          ? ""
+          : `<button class="hist-delete-btn" title="Delete this attempt" onclick="event.stopPropagation(); deleteHistoryItem(${i})">&#10005;</button>
+             <div class="hist-chevron">&#9660;</div>`;
+
+        return `
+        <li class="history-item${selectedHistoryIdx.has(i)?' selected':''}" id="hist-item-${i}">
+          <div class="hist-row" onclick="${rowClick}">
+            ${checkbox}
+            <div style="flex:1;">
+              <div class="hist-course">${h.code} &middot; ${h.name}</div>
+              <div class="hist-date">${dateStr}</div>
+            </div>
+            <div class="hist-score-wrap">
+              <div class="hist-score">${h.score}/${h.total} &middot; ${h.pct}%</div>
+              ${rightControls}
+            </div>
+          </div>
+          <div class="hist-details">${historySelectMode ? "" : detailsHtml}</div>
+        </li>`;
+      }).join("");
+    }
+    function toggleHistoryItem(i) {
+      const item = document.getElementById(`hist-item-${i}`);
+      if (item) item.classList.toggle("open");
+    }
+    function toggleSelectMode() {
+      historySelectMode = !historySelectMode;
+      selectedHistoryIdx.clear();
+      renderHistory();
+    }
+    function toggleHistorySelect(i) {
+      if (selectedHistoryIdx.has(i)) selectedHistoryIdx.delete(i);
+      else selectedHistoryIdx.add(i);
+      renderHistory();
+    }
+    function deleteSelectedHistory() {
+      if (!selectedHistoryIdx.size) return;
+      const count = selectedHistoryIdx.size;
+      if (!confirm(`Delete ${count} selected quiz attempt${count!==1?'s':''}? This can't be undone.`)) return;
+      const hist = getHistory().filter((_, i) => !selectedHistoryIdx.has(i));
+      localStorage.setItem("quizHistory", JSON.stringify(hist));
+      historySelectMode = false;
+      selectedHistoryIdx.clear();
+      renderHistory();
+    }
+    function deleteHistoryItem(i) {
+      const hist = getHistory();
+      if (!confirm("Delete this quiz attempt? This can't be undone.")) return;
+      hist.splice(i, 1);
+      localStorage.setItem("quizHistory", JSON.stringify(hist));
+      renderHistory();
+    }
+    function clearAllHistory() {
+      const hist = getHistory();
+      if (!hist.length) return;
+      if (!confirm("Clear your entire quiz history? This can't be undone.")) return;
+      localStorage.removeItem("quizHistory");
+      renderHistory();
+    }
+    function navGo(screen) {
+      if (screen==="stats") renderStats();
+      if (screen==="history") renderHistory();
+      showScreen(screen);
+    }
+// Function to clean LaTeX dollar signs and formatting from text
+function cleanText(str) {
+  if (typeof str !== 'string') return str;
+  return str
+    .replace(/\$\$/g, '')      // Removes double dollar signs ($$)
+    .replace(/\$/g, '')       // Removes single dollar signs ($)
+    .replace(/\\lfloor/g, '⌊') // Optional: convert LaTeX floor/ceiling to clean Unicode
+    .replace(/\\rfloor/g, '⌋')
+    .replace(/\\ceil/g, '⌈')
+    .replace(/\\rceil/g, '⌉');
+}
+
+// Apply it when parsing/mapping incoming questions from server:
+function sanitizeQuestions(questions) {
+  return questions.map(q => ({
+    ...q,
+    text: cleanText(q.text),
+    options: q.options ? q.options.map(opt => cleanText(opt)) : [],
+    explanation: cleanText(q.explanation)
+  }));
+}
+    
+    function buildGrid() {
+      const grid = document.getElementById("course-grid");
+      grid.innerHTML = "";
+      courses.forEach((c,i) => {
+        const btn = document.createElement("button");
+        btn.className = "course-card";
+        btn.style.position = "relative";
+        btn.innerHTML = `<div class="course-code">${c.code}</div><div class="course-name">${c.name}</div><div class="course-meta">${c.questions.length} questions &middot; Mix</div>`;
+        btn.addEventListener("click", () => startQuiz(i));
+
+        if (c.isDoneQuiz) {
+          const delBtn = document.createElement("span");
+          delBtn.textContent = "\u00d7";
+          delBtn.title = "Remove from Quizzes You've Done";
+          delBtn.style.cssText = "position:absolute; top:8px; right:10px; font-family:var(--sans); font-size:18px; line-height:1; color:var(--muted); cursor:pointer; padding:4px 8px;";
+          delBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            deleteDoneQuiz(c.doneQuizId);
+          });
+          btn.appendChild(delBtn);
+        }
+
+        grid.appendChild(btn);
+      });
+    }
+
+    async function deleteDoneQuiz(id) {
+      if (!id) return;
+      const token = await getAuthToken();
+      if (!token) return;
+      try {
+        await fetch(`/api/completed-quiz/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch (e) {
+        // even if the request fails, refresh below to reflect real server state
+      }
+      loadDoneQuizzes();
+    }
+
+    function startQuiz(idx) {
+      activeCourse = idx; qIndex = 0; score = 0; quizAnswers = [];
+      showScreen("quiz"); renderQuestion();
+    }
+
+    function renderQuestion() {
+      const c = courses[activeCourse], q = c.questions[qIndex];
+      const num = qIndex+1, tot = c.questions.length;
+      selectedIdx = null; revealed = false;
+
+      quizScreen.classList.remove("quiz-animate");
+      void quizScreen.offsetWidth;
+      quizScreen.classList.add("quiz-animate");
+
+      document.getElementById("nav-code").textContent     = c.code;
+      document.getElementById("nav-progress").innerHTML = `${num} / ${tot}`;
+
+      const dr = document.getElementById("dots-row");
+      dr.innerHTML = "";
+      for(let i=0;i<tot;i++){
+        const d=document.createElement("div");
+        d.className="dot"+(i<qIndex?" done":i===qIndex?" current":"");
+        dr.appendChild(d);
+      }
+
+      document.getElementById("ghost-num").textContent  = String(num).padStart(2,"0");
+      document.getElementById("type-badge").textContent = q.type==="tf"?"True / False":"Multiple Choice";
+      document.getElementById("q-text").innerHTML     = q.text;
+
+      // Hint (only present on AI-generated questions for now — curated course-bank
+      // questions don't have hints authored yet)
+      const hintRow  = document.getElementById("hint-row");
+      const hintBtn  = document.getElementById("hint-btn");
+      const hintText = document.getElementById("hint-text");
+      if (q.hint) {
+        hintRow.style.display = "block";
+        hintBtn.style.display = "inline-block";
+        hintBtn.textContent = "💡 Show Hint";
+        hintText.style.display = "none";
+        hintText.textContent = q.hint;
+      } else {
+        hintRow.style.display = "none";
+      }
+
+      const ol=document.getElementById("options-list");
+      ol.innerHTML="";
+      const L=["A","B","C","D"];
+      q.options.forEach((opt,i)=>{
+        const li=document.createElement("li");
+        const btn=document.createElement("button");
+        btn.className="opt-btn";
+        btn.dataset.i=i;
+        btn.innerHTML=`<span class="opt-letter">${q.type==="tf"?"":L[i]}</span><span class="opt-label">${opt}</span><span class="opt-icon">&#9679;</span>`;
+        btn.addEventListener("click",()=>handleSelect(i));
+        li.appendChild(btn); ol.appendChild(li);
+      });
+      document.getElementById("footer").innerHTML="";
+    }
+
+    function toggleHint() {
+      const btn  = document.getElementById("hint-btn");
+      const text = document.getElementById("hint-text");
+      const showing = text.style.display === "block";
+      text.style.display = showing ? "none" : "block";
+      btn.textContent = showing ? "💡 Show Hint" : "💡 Hide Hint";
+    }
+
+    function handleSelect(idx) {
+      if(revealed) return;
+      selectedIdx=idx;
+      document.querySelectorAll(".opt-btn").forEach(b=>{ b.classList.remove("selected"); b.querySelector(".opt-icon").innerHTML="&#9679;"; });
+      const chosen=document.querySelectorAll(".opt-btn")[idx];
+      chosen.classList.add("selected");
+      const footer=document.getElementById("footer");
+      footer.innerHTML="";
+      const sub=document.createElement("button");
+      sub.className="submit-btn"; sub.textContent="Submit";
+      sub.addEventListener("click",handleReveal);
+      footer.appendChild(sub);
+    }
+
+    function handleReveal() {
+      if(selectedIdx===null) return;
+      revealed=true;
+      const q=courses[activeCourse].questions[qIndex];
+      const allBtns=document.querySelectorAll(".opt-btn");
+      const isRight=selectedIdx===q.correct;
+      if(isRight) score++;
+      quizAnswers.push({
+        text: q.text,
+        options: q.options,
+        selectedIdx: selectedIdx,
+        correctIdx: q.correct,
+        isRight: isRight,
+        explanation: q.explanation
+      });
+      allBtns.forEach(b=>{ b.disabled=true; b.classList.remove("selected"); });
+      allBtns[q.correct].classList.add("correct");
+      allBtns[q.correct].querySelector(".opt-icon").textContent="✓";
+      if(!isRight){ allBtns[selectedIdx].classList.add("wrong"); allBtns[selectedIdx].querySelector(".opt-icon").textContent="✗"; }
+      const footer=document.getElementById("footer");
+      footer.innerHTML="";
+      const msg=document.createElement("span");
+      msg.className="result-msg "+(isRight?"correct":"wrong");
+      msg.innerHTML=(isRight?"Correct! ":"Incorrect. ")+q.explanation;
+      footer.appendChild(msg);
+      const total=courses[activeCourse].questions.length;
+      const nxt=document.createElement("button");
+      nxt.className="next-btn";
+      if(qIndex<total-1){
+        nxt.textContent="Next \u2192";
+        nxt.addEventListener("click",()=>{ qIndex++; renderQuestion(); });
+      } else {
+        nxt.textContent="Finish \u2192";
+        nxt.addEventListener("click",showScore);
+      }
+      footer.appendChild(nxt);
+    }
+
+    function showScore() {
+      const c=courses[activeCourse], total=c.questions.length;
+      const pct=Math.round((score/total)*100);
+      let grade,gc,gb;
+      if(pct>=70){grade="Pass";gc="#2D6A4F";gb="#EAF4EE";}
+      else if(pct>=50){grade="Average";gc="#7B5E00";gb="#FFF8E0";}
+      else{grade="Below Pass";gc="#C1121F";gb="#FDECEA";}
+      document.getElementById("score-label").textContent  = c.code+" \u00b7 Quiz Complete";
+      document.getElementById("score-course").textContent = c.name;
+      document.getElementById("score-big").textContent    = `${score}/${total}`;
+      document.getElementById("score-sub").textContent    = `${pct}% \u2014 you answered ${score} question${score!==1?"s":""} correctly`;
+      const pill=document.getElementById("grade-pill");
+      pill.textContent=grade;
+      Object.assign(pill.style,{background:gb,color:gc,fontFamily:"var(--sans)",fontSize:"12px",fontWeight:"700",letterSpacing:"3px",textTransform:"uppercase"});
+      saveAttempt({ code:c.code, name:c.name, score, total, pct, date:new Date().toISOString(), answers:quizAnswers });
+      saveCompletedQuizToAccount(c, score, total, pct);
+
+      const moreBtn = document.getElementById("more-questions-btn");
+      if (c.aiTopic || c.sourceFile) {
+        moreBtn.style.display = "block";
+        moreBtn.textContent = `+ Generate ${c.aiCount || 10} More Questions`;
+      } else {
+        moreBtn.style.display = "none";
+      }
+
+      showScreen("score");
+    }
+
+    // Saves the finished quiz to the signed-in user's account so it shows up
+    // under "Quizzes You've Done" on Home and can be retaken anytime.
+    async function saveCompletedQuizToAccount(course, score, total, pct) {
+      const token = await getAuthToken();
+      if (!token) return; // not signed in — nothing to save to
+      try {
+        await fetch("/api/completed-quiz", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ name: course.name, questions: course.questions, score, total, pct }),
+        });
+        loadDoneQuizzes();
+      } catch (e) {
+        // Non-critical — quiz history still saved locally either way
+      }
+    }
+
+    // Fetches and renders the signed-in user's previously completed quizzes
+    // onto the Home screen grid, replacing what used to be the course bank.
+    async function loadDoneQuizzes() {
+      const emptyNote  = document.getElementById("done-quizzes-empty");
+      const signinNote = document.getElementById("done-quizzes-signin-note");
+      emptyNote.style.display  = "none";
+      signinNote.style.display = "none";
+
+      // Clear out any previously loaded done-quizzes before re-adding, so
+      // repeated calls don't pile up duplicates in the courses array.
+      for (let i = courses.length - 1; i >= 0; i--) {
+        if (courses[i].isDoneQuiz) courses.splice(i, 1);
+      }
+
+      const token = await getAuthToken();
+      if (!token) {
+        buildGrid();
+        signinNote.style.display = "block";
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/completed-quizzes", { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if (res.ok && Array.isArray(data.items)) {
+          data.items.forEach((item) => {
+            courses.push({
+              code: "DONE",
+              name: item.name,
+              questions: item.questions,
+              isDoneQuiz: true,
+              doneQuizId: item.id,
+            });
+          });
+        }
+        buildGrid();
+        if (!data.items || !data.items.length) emptyNote.style.display = "block";
+      } catch (e) {
+        buildGrid();
+        emptyNote.style.display = "block";
+      }
+    }
+
+    async function shareCurrentQuiz() {
+      const course = courses[activeCourse];
+      if (!course) return;
+
+      const btn = document.getElementById("share-quiz-btn");
+      const originalLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Preparing link…";
+
+      try {
+        let shareUrl;
+        if (course.aiTopic || course.sourceFile) {
+          // AI-generated quiz — save the exact questions so a friend gets the same ones
+          const token = await getAuthToken();
+          if (!token) { navGo("signin"); return; }
+          const res = await fetch("/api/share-quiz", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ name: course.name, questions: course.questions }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Couldn't create a shareable link.");
+          shareUrl = `${window.location.origin}/?shared=${data.shareId}`;
+        } else {
+          // Curated course-bank quiz — identical for everyone, so just deep-link by course code
+          shareUrl = `${window.location.origin}/?course=${encodeURIComponent(course.code)}`;
+        }
+
+        if (navigator.share) {
+          await navigator.share({
+            title: `${course.name} — Omega Prep Quiz`,
+            text: `Try this quiz on Omega Prep: ${course.name}`,
+            url: shareUrl,
+          });
+        } else {
+          await navigator.clipboard.writeText(shareUrl);
+          alert("Link copied! Share it with a friend:\n" + shareUrl);
+        }
+      } catch (err) {
+        if (err.name !== "AbortError") alert(err.message || "Couldn't share this quiz. Try again.");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+      }
+    }
+
+    // Loads a quiz from an incoming share link (?shared=<id> for AI quizzes,
+    // ?course=<code> for course-bank quizzes) and jumps straight into it.
+    async function handleSharedQuizLink() {
+      const params = new URLSearchParams(window.location.search);
+      const sharedId = params.get("shared");
+      const courseCode = params.get("course");
+
+      if (sharedId) {
+        history.replaceState(null, "", window.location.pathname);
+        try {
+          const res = await fetch(`/api/shared-quiz/${encodeURIComponent(sharedId)}`);
+          const data = await res.json();
+          if (!res.ok) { alert(data.error || "This shared quiz link is invalid or has expired."); return; }
+          const newCourse = { code: "SHARED", name: data.name, questions: data.questions };
+          courses.push(newCourse);
+          buildGrid();
+          startQuiz(courses.length - 1);
+        } catch (e) {
+          alert("Couldn't load the shared quiz. Check your connection and try again.");
+        }
+      } else if (courseCode) {
+        history.replaceState(null, "", window.location.pathname);
+        const idx = courses.findIndex((c) => c.code === courseCode);
+        if (idx >= 0) startQuiz(idx);
+      }
+    }
+
+    async function generateMoreQuestions() {
+      const course = courses[activeCourse];
+      if (!course || (!course.aiTopic && !course.sourceFile)) return;
+
+      const token = await getAuthToken();
+      if (!token) { navGo("signin"); return; }
+
+      const btn = document.getElementById("more-questions-btn");
+      const originalLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Generating…";
+      const addCount = course.aiCount || 10;
+
+      try {
+        let newQuestions;
+        if (course.sourceFile) {
+          const formData = new FormData();
+          formData.append("file", course.sourceFile);
+          formData.append("count", addCount);
+          const res = await fetch("/api/generate-quiz-from-file", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          });
+          const data = await res.json();
+          if (res.status === 402) throw new Error("You've used today's free generations. Buy more from the Home screen to keep going.");
+          if (!res.ok) throw new Error(data.error || "Failed to generate more questions.");
+          newQuestions = data.questions;
+        } else {
+          const res = await fetch("/api/generate-quiz", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ topic: course.aiTopic, count: addCount }),
+          });
+          const data = await res.json();
+          if (res.status === 402) throw new Error("You've used today's free generations. Buy more from the Home screen to keep going.");
+          if (!res.ok) throw new Error(data.error || "Failed to generate more questions.");
+          newQuestions = data.questions;
+        }
+
+        const startAt = course.questions.length;
+        course.questions = course.questions.concat(newQuestions);
+        addAIGeneratedCount(newQuestions.length);
+        buildGrid();
+        refreshUsageDisplay();
+
+        // Continue the same quiz — score and prior answers carry over,
+        // picking up right where the new questions begin.
+        qIndex = startAt;
+        showScreen("quiz");
+        renderQuestion();
+      } catch (err) {
+        alert(err.message || "Something went wrong generating more questions. Try again.");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+      }
+    }
+
+    function retryQuiz(){ startQuiz(activeCourse); }
+    function goHome(){ activeCourse=null; showScreen("course"); }
+
+    // ── AI-generated quizzes ──
+    async function generateAIQuiz() {
+      const topicInput = document.getElementById("ai-topic-input");
+      const countInput = document.getElementById("ai-count-input");
+      const btn        = document.getElementById("ai-generate-btn");
+      const status      = document.getElementById("ai-status");
+      const topic = topicInput.value.trim();
+      const count = countInput.value;
+
+      if (!topic) { status.textContent = "Enter a topic first."; return; }
+
+      const token = await getAuthToken();
+      if (!token) {
+        status.innerHTML = 'Please <a href="#" onclick="navGo(\'signin\'); return false;" style="color:var(--accent); text-decoration:underline;">sign in</a> to generate a quiz.';
+        return;
+      }
+
+      btn.disabled = true;
+      const originalLabel = btn.textContent;
+      btn.textContent = "Generating…";
+      status.textContent = "Asking the AI to write your quiz — this can take a few seconds.";
+
+      try {
+        const res = await fetch("/api/generate-quiz", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ topic, count }),
+        });
+        const data = await res.json();
+        if (res.status === 402) {
+          status.innerHTML = "You've used today's free generations. ";
+          const buyLink = document.createElement("a");
+          buyLink.href = "#"; buyLink.textContent = "Buy more"; buyLink.style.cssText = "color:var(--accent); text-decoration:underline;";
+          buyLink.onclick = (e) => { e.preventDefault(); buyMoreGenerations(); };
+          status.appendChild(buyLink);
+          return;
+        }
+        if (!res.ok) throw new Error(data.error || "Failed to generate quiz.");
+
+        const newCourse = {
+          code: "AI",
+          name: topic,
+          questions: data.questions,
+          aiTopic: topic,
+          aiCount: count,
+        };
+        courses.push(newCourse);
+        addAIGeneratedCount(data.questions.length);
+        buildGrid();
+        status.textContent = "";
+        topicInput.value = "";
+        refreshUsageDisplay();
+        startQuiz(courses.length - 1);
+      } catch (err) {
+        status.textContent = err.message || "Something went wrong. Try again.";
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+      }
+    }
+    document.getElementById("ai-generate-btn").addEventListener("click", generateAIQuiz);
+
+    // ── AI quiz generation from an uploaded file ──
+    async function generateAIQuizFromFile() {
+      const fileInput  = document.getElementById("ai-file-input");
+      const countInput = document.getElementById("ai-file-count-input");
+      const btn        = document.getElementById("ai-file-generate-btn");
+      const status      = document.getElementById("ai-file-status");
+      const file = fileInput.files[0];
+
+      if (!file) { status.textContent = "Choose a PDF or text file first."; return; }
+
+      const token = await getAuthToken();
+      if (!token) {
+        status.innerHTML = 'Please <a href="#" onclick="navGo(\'signin\'); return false;" style="color:var(--accent); text-decoration:underline;">sign in</a> to generate a quiz.';
+        return;
+      }
+
+      btn.disabled = true;
+      const originalLabel = btn.textContent;
+      btn.textContent = "Analysing…";
+      status.textContent = "Reading the file and writing questions from its content — this can take a bit longer for big documents.";
+
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("count", countInput.value);
+
+        const res = await fetch("/api/generate-quiz-from-file", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        const data = await res.json();
+        if (res.status === 402) {
+          status.innerHTML = "You've used today's free generations. ";
+          const buyLink = document.createElement("a");
+          buyLink.href = "#"; buyLink.textContent = "Buy more"; buyLink.style.cssText = "color:var(--accent); text-decoration:underline;";
+          buyLink.onclick = (e) => { e.preventDefault(); buyMoreGenerations(); };
+          status.appendChild(buyLink);
+          return;
+        }
+        if (!res.ok) throw new Error(data.error || "Failed to generate quiz from file.");
+
+        const newCourse = {
+          code: "AI",
+          name: file.name.replace(/\.[^/.]+$/, ""),
+          questions: data.questions,
+          sourceFile: file,
+          aiCount: countInput.value,
+        };
+        courses.push(newCourse);
+        addAIGeneratedCount(data.questions.length);
+        buildGrid();
+        status.textContent = "";
+        fileInput.value = "";
+        refreshUsageDisplay();
+        startQuiz(courses.length - 1);
+      } catch (err) {
+        status.textContent = err.message || "Something went wrong. Try again.";
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+      }
+    }
+    document.getElementById("ai-file-generate-btn").addEventListener("click", generateAIQuizFromFile);
+
+    // ── Sign in / Sign up / Google auth (Firebase) ──
+    let authMode = "signin"; // toggles to "signup"
+
+    function setSigninError(msg) {
+      document.getElementById("signin-error").textContent = msg || "";
+    }
+
+    function friendlyAuthError(err) {
+      const map = {
+        "auth/email-already-in-use": "That email already has an account — try signing in instead.",
+        "auth/invalid-email": "That doesn't look like a valid email address.",
+        "auth/weak-password": "Password should be at least 6 characters.",
+        "auth/user-not-found": "No account found with that email.",
+        "auth/wrong-password": "Incorrect password.",
+        "auth/invalid-credential": "Incorrect email or password.",
+        "auth/popup-closed-by-user": "Google sign-in was cancelled.",
+        "auth/network-request-failed": "Network error — check your connection and try again."
+      };
+      return map[err.code] || (err.message || "Something went wrong. Please try again.");
+    }
+
+    document.getElementById("signin-toggle-btn").addEventListener("click", () => {
+      authMode = authMode === "signin" ? "signup" : "signin";
+      document.getElementById("signin-submit-btn").textContent = authMode === "signin" ? "Sign In" : "Create Account";
+      document.getElementById("signin-toggle-text").textContent = authMode === "signin" ? "Don't have an account?" : "Already have an account?";
+      document.getElementById("signin-toggle-btn").textContent = authMode === "signin" ? "Sign Up" : "Sign In";
+      document.getElementById("signin-title").textContent = authMode === "signin" ? "Sign In" : "Create Account";
+      setSigninError("");
+    });
+
+    document.getElementById("signin-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      setSigninError("");
+      if (!auth) { setSigninError("Sign-in isn't set up yet — add your Firebase config to enable this."); return; }
+      const email = document.getElementById("signin-email").value.trim();
+      const password = document.getElementById("signin-password").value;
+      const btn = document.getElementById("signin-submit-btn");
+      btn.disabled = true;
+      try {
+        if (authMode === "signup") {
+          await auth.createUserWithEmailAndPassword(email, password);
+        } else {
+          await auth.signInWithEmailAndPassword(email, password);
+        }
+      } catch (err) {
+        setSigninError(friendlyAuthError(err));
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // ── Google sign-in via Google Identity Services (GIS) ──
+    // Bypasses Firebase's signInWithPopup/signInWithRedirect entirely, since both
+    // route through an intermediary omega-prep.firebaseapp.com page that's proven
+    // unreliable on mobile Chrome for apps not hosted on Firebase Hosting.
+    const GOOGLE_WEB_CLIENT_ID = "356659140508-m47pdpf1inv6rme5c8irr6upprf52ll5.apps.googleusercontent.com";
+    let googleIdentityReady = false;
+
+    function initGoogleIdentity() {
+      if (googleIdentityReady) return true;
+      if (!(window.google && google.accounts && google.accounts.id)) return false;
+      google.accounts.id.initialize({
+        client_id: GOOGLE_WEB_CLIENT_ID,
+        callback: handleGoogleCredential,
+        auto_select: false,
+      });
+      googleIdentityReady = true;
+      return true;
+    }
+
+    async function handleGoogleCredential(response) {
+      setSigninError("");
+      if (!auth) { setSigninError("Sign-in isn't set up yet — add your Firebase config to enable this."); return; }
+      try {
+        const credential = firebase.auth.GoogleAuthProvider.credential(response.credential);
+        await auth.signInWithCredential(credential);
+      } catch (err) {
+        setSigninError(friendlyAuthError(err));
+      }
+    }
+
+    // Try to initialize as soon as the GIS script is ready, so the first tap
+    // of the button doesn't have to wait on it.
+    window.addEventListener("load", () => { initGoogleIdentity(); });
+
+    document.getElementById("google-signin-btn").addEventListener("click", () => {
+      setSigninError("");
+      if (!auth) { setSigninError("Sign-in isn't set up yet — add your Firebase config to enable this."); return; }
+      if (!initGoogleIdentity()) {
+        setSigninError("Google sign-in couldn't load. Check your connection and try again.");
+        return;
+      }
+      google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          setSigninError("Google sign-in didn't appear — try again, or check that pop-ups aren't blocked for this site.");
+        }
+      });
+    });
+
+    // Catch the result once the browser comes back from the Google redirect.
+    // Surface the outcome even if we're not currently on the Sign In screen,
+    // so a failure doesn't silently disappear back to Home.
+    if (auth) {
+      auth.getRedirectResult()
+        .then((result) => {
+          if (result && result.user) {
+            console.log("Google redirect sign-in succeeded:", result.user.email);
+          }
+        })
+        .catch((err) => {
+          console.error("Google redirect sign-in failed:", err);
+          if (err && err.code) {
+            navGo("signin");
+            setSigninError(friendlyAuthError(err) + ` (code: ${err.code})`);
+          }
+        });
+    }
+
+    document.getElementById("signout-btn").addEventListener("click", () => {
+      if (auth) auth.signOut();
+    });
+
+    if (auth) {
+      auth.onAuthStateChanged((user) => {
+        const formWrap    = document.getElementById("signin-form-wrap");
+        const accountWrap = document.getElementById("signin-account-wrap");
+        const badgeBtn     = document.getElementById("account-badge-btn");
+        const badgeIcon    = document.getElementById("account-badge-icon");
+        const badgeInitial = document.getElementById("account-badge-initial");
+        if (user) {
+          formWrap.style.display    = "none";
+          accountWrap.style.display = "block";
+          document.getElementById("signin-title").textContent = "Your Account";
+          document.getElementById("account-email").textContent = user.email || "Signed in";
+          const initial = (user.email || "?").charAt(0).toUpperCase();
+          document.getElementById("account-avatar").textContent = initial;
+          badgeInitial.textContent = initial;
+          badgeIcon.style.display = "none";
+          badgeInitial.style.display = "block";
+          badgeBtn.classList.add("signed-in");
+          badgeBtn.title = user.email || "Account";
+          refreshUsageDisplay();
+          loadDoneQuizzes();
+        } else {
+          formWrap.style.display    = "block";
+          accountWrap.style.display = "none";
+          document.getElementById("signin-title").textContent = authMode === "signin" ? "Sign In" : "Create Account";
+          badgeIcon.style.display = "block";
+          badgeInitial.style.display = "none";
+          badgeBtn.classList.remove("signed-in");
+          badgeBtn.title = "Sign In";
+          const usageEl = document.getElementById("usage-indicator");
+          if (usageEl) usageEl.textContent = "Sign in to generate quizzes — 5 free every day.";
+          loadDoneQuizzes();
+        }
+      });
+    }
+
+    // ── Monetization: usage display + Paystack credit purchase ──
+    // Never throws — if Firebase can't reach Google to refresh the token
+    // (e.g. a network block), this resolves to null instead of silently
+    // crashing whatever function called it.
+    async function getAuthToken() {
+      if (!auth || !auth.currentUser) return null;
+      try {
+        return await auth.currentUser.getIdToken();
+      } catch (err) {
+        console.error("Couldn't get a fresh sign-in token:", err);
+        return null;
+      }
+    }
+
+    async function refreshUsageDisplay() {
+      const usageEl = document.getElementById("usage-indicator");
+      if (!usageEl) return;
+
+      if (!auth || !auth.currentUser) {
+        usageEl.textContent = "Sign in to generate quizzes — 5 free every day.";
+        return;
+      }
+
+      const token = await getAuthToken();
+      if (!token) {
+        // Signed in locally, but couldn't reach Google to confirm it right now —
+        // this is almost always a network issue, not an actual sign-out.
+        usageEl.textContent = "Couldn't verify your sign-in — check your connection and try again.";
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/usage", { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if (!res.ok) { usageEl.textContent = "Couldn't check your usage right now."; return; }
+        if (data.remainingFree > 0) {
+          usageEl.textContent = `${data.remainingFree} free generation${data.remainingFree===1?"":"s"} left today` + (data.credits > 0 ? ` · ${data.credits} credits` : "");
+        } else if (data.credits > 0) {
+          usageEl.textContent = `Free generations used for today · ${data.credits} credits available`;
+        } else {
+          usageEl.textContent = `Free generations used for today — buy more to keep going`;
+        }
+      } catch (e) {
+        usageEl.textContent = "Couldn't check your usage — check your connection.";
+      }
+    }
+
+    async function buyMoreGenerations() {
+      const token = await getAuthToken();
+      if (!token) { navGo("signin"); return; }
+      const btn = document.getElementById("buy-credits-btn");
+      if (btn) { btn.disabled = true; btn.textContent = "Starting checkout…"; }
+      try {
+        const res = await fetch("/api/paystack/initialize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Couldn't start payment.");
+        window.location.href = data.authorizationUrl;
+      } catch (err) {
+        alert(err.message || "Couldn't start payment. Try again.");
+        if (btn) { btn.disabled = false; btn.textContent = "Buy More Generations"; }
+      }
+    }
+
+    // Catches the redirect back from Paystack after payment and confirms the credit
+    // Waits for Firebase to finish restoring the signed-in session on page load,
+    // instead of checking auth.currentUser immediately (which is often still null
+    // for a moment right after a fresh page load, like returning from Paystack).
+    function waitForAuthReady() {
+      return new Promise((resolve) => {
+        if (!auth) { resolve(null); return; }
+        const unsubscribe = auth.onAuthStateChanged((user) => {
+          unsubscribe();
+          resolve(user);
+        });
+      });
+    }
+
+    async function handlePaystackReturn() {
+      const params = new URLSearchParams(window.location.search);
+      if (!params.get("paystackReturn")) return;
+      const reference = params.get("reference") || params.get("trxref");
+      history.replaceState(null, "", window.location.pathname); // clean the URL
+      if (!reference) return;
+
+      const user = await waitForAuthReady();
+      if (!user) {
+        alert(`We couldn't confirm you're signed in. If you completed the payment, sign in and contact support with this reference: ${reference}`);
+        return;
+      }
+      const token = await user.getIdToken();
+      try {
+        const res = await fetch("/api/paystack/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ reference }),
+        });
+        const data = await res.json();
+        if (res.ok && data.credited) {
+          alert(`Payment confirmed! You now have ${data.credits} generation credits.`);
+        } else if (res.ok && data.alreadyProcessed) {
+          alert(`That payment was already applied. You have ${data.credits} credits.`);
+        } else {
+          alert(data.error || `We couldn't confirm that payment. If you were charged, contact support with this reference: ${reference}`);
+        }
+        refreshUsageDisplay();
+      } catch (e) {
+        alert(`We couldn't confirm that payment. If you were charged, contact support with this reference: ${reference}`);
+      }
+    }
+
+    buildGrid(); showScreen("course");
+    handlePaystackReturn();
+    handleSharedQuizLink();
+    loadDoneQuizzes();
+    // Self-contained theme management system
+const themeToggler = document.getElementById("theme-toggle");
+
+themeToggler.addEventListener("click", () => {
+  document.body.classList.toggle("dark-theme");
+  
+  // Cache user selection settings
+  if (document.body.classList.contains("dark-theme")) {
+    localStorage.setItem("selectedTheme", "dark");
+  } else {
+    localStorage.setItem("selectedTheme", "light");
+  }
+});
+
+// Immediately initialize user theme preference checks on bootup routines
+if (localStorage.getItem("selectedTheme") === "dark") {
+  document.body.classList.add("dark-theme");
+}
+  </script>
+</body>
+</html>
