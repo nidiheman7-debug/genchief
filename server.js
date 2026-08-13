@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import multer from "multer";
 import { GoogleGenAI } from "@google/genai";
+import pdfParse from "pdf-parse";
 import admin from "firebase-admin";
 
 dotenv.config();
@@ -214,21 +215,34 @@ app.post("/api/generate-quiz-from-file", requireAuth, upload.single("file"), asy
 that test understanding of the curriculum covered in the document — concepts, definitions, facts,
 and reasoning it contains. Base every question strictly on content actually present in the document.`;
 
-    let promptContents = [];
+    let extractedText;
 
     if (isPdf) {
-      // Send PDF buffer directly as base64 inlineData
-      promptContents.push({ text: instruction });
-      promptContents.push({
-        inlineData: {
-          data: req.file.buffer.toString("base64"),
-          mimeType: "application/pdf",
-        },
-      });
+      // Extract only the text layer from the PDF — Gemini never sees the
+      // original file, images, or layout, only the plain text pulled from it.
+      try {
+        const parsed = await pdfParse(req.file.buffer);
+        extractedText = parsed.text || "";
+      } catch (parseErr) {
+        console.error("PDF text extraction failed:", parseErr);
+        return res.status(400).json({
+          error: "Couldn't read text from this PDF. It may be scanned/image-based or corrupted.",
+        });
+      }
+      if (!extractedText.trim()) {
+        return res.status(400).json({
+          error: "No readable text was found in this PDF (it may be a scanned image without a text layer).",
+        });
+      }
     } else {
-      const fileText = req.file.buffer.toString("utf-8").slice(0, 100000);
-      promptContents.push({ text: `${instruction}\n\nDOCUMENT CONTENT:\n"""\n${fileText}\n"""` });
+      extractedText = req.file.buffer.toString("utf-8");
     }
+
+    extractedText = extractedText.slice(0, 100000);
+
+    const promptContents = [
+      { text: `${instruction}\n\nDOCUMENT CONTENT:\n"""\n${extractedText}\n"""` },
+    ];
 
     const result = await genAI.models.generateContent({
       model: "gemini-3.6-flash",
