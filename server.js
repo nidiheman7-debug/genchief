@@ -3,7 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import multer from "multer";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import admin from "firebase-admin";
 
 dotenv.config();
@@ -131,8 +131,8 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// Initialize Gemini Client
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+// Initialize the Gemini client (new @google/genai SDK)
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 const QUESTION_SYSTEM_PROMPT = `You generate university-level quiz questions.
 Respond with ONLY a raw JSON array matching this exact structure:
@@ -179,16 +179,16 @@ app.post("/api/generate-quiz", requireAuth, async (req, res) => {
     const numQuestions = Math.min(Math.max(parseInt(count, 10) || 8, 1), 25);
 
     try {
-      const model = genAI.getGenerativeModel({
-        model: "gemini-3.6-flash",
-        systemInstruction: QUESTION_SYSTEM_PROMPT,
-        generationConfig: { responseMimeType: "application/json" },
-      });
-
       const userPrompt = `Generate ${numQuestions} quiz questions about: ${topic.trim()}`;
-      const result = await model.generateContent(userPrompt);
-      const textResponse = result.response.text();
-      const questions = JSON.parse(textResponse);
+      const response = await ai.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents: userPrompt,
+        config: {
+          systemInstruction: QUESTION_SYSTEM_PROMPT,
+          responseMimeType: "application/json",
+        },
+      });
+      const questions = JSON.parse(response.text);
 
       res.json({ questions, remainingFree: usage.remainingFree, credits: usage.credits });
     } catch (genErr) {
@@ -245,32 +245,32 @@ app.post("/api/generate-quiz-from-file", requireAuth, upload.single("file"), asy
 that test understanding of the curriculum covered in the document — concepts, definitions, facts,
 and reasoning it contains. Base every question strictly on content actually present in the document.`;
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-3.6-flash",
-      systemInstruction: QUESTION_SYSTEM_PROMPT,
-      generationConfig: { responseMimeType: "application/json" },
-    });
-
-    let promptContents = [];
+    let contents = [];
 
     if (isPdf) {
       // Send PDF buffer directly as base64 inlineData
-      promptContents.push({
+      contents.push({ text: instruction });
+      contents.push({
         inlineData: {
-          data: req.file.buffer.toString("base64"),
           mimeType: "application/pdf",
+          data: req.file.buffer.toString("base64"),
         },
       });
-      promptContents.push(instruction);
     } else {
       const fileText = req.file.buffer.toString("utf-8").slice(0, 100000);
-      promptContents.push(`${instruction}\n\nDOCUMENT CONTENT:\n"""\n${fileText}\n"""`);
+      contents.push({ text: `${instruction}\n\nDOCUMENT CONTENT:\n"""\n${fileText}\n"""` });
     }
 
     try {
-      const result = await model.generateContent(promptContents);
-      const textResponse = result.response.text();
-      const questions = JSON.parse(textResponse);
+      const response = await ai.models.generateContent({
+        model: "gemini-3.6-flash",
+        contents,
+        config: {
+          systemInstruction: QUESTION_SYSTEM_PROMPT,
+          responseMimeType: "application/json",
+        },
+      });
+      const questions = JSON.parse(response.text);
 
       res.json({ questions, filename: req.file.originalname, remainingFree: usage.remainingFree, credits: usage.credits });
     } catch (genErr) {
