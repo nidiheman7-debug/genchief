@@ -3,8 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import multer from "multer";
-import { GoogleGenAI } from "@google/genai";
-import pdfParse from "pdf-parse";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import admin from "firebase-admin";
 
 dotenv.config();
@@ -71,24 +70,45 @@ async function getUsage(uid) {
 }
 
 // Checks whether the user can generate right now, and if so, consumes one unit
-// (free daily allowance first, then paid credits). Returns { allowed, remainingFree, credits }.
+// (free daily allowance first, then paid credits). Returns { allowed, remainingFree, credits, usedType }.
 async function consumeGeneration(uid) {
   const { ref, data } = await getUsage(uid);
 
   if (data.freeUsedToday < FREE_DAILY_GENERATIONS) {
     const updated = { ...data, freeUsedToday: data.freeUsedToday + 1 };
     await ref.set(updated, { merge: true });
-    return { allowed: true, remainingFree: FREE_DAILY_GENERATIONS - updated.freeUsedToday, credits: updated.credits };
+    return { allowed: true, remainingFree: FREE_DAILY_GENERATIONS - updated.freeUsedToday, credits: updated.credits, usedType: "free" };
   }
 
   if (data.credits > 0) {
     const updated = { ...data, credits: data.credits - 1 };
     await ref.set(updated, { merge: true });
-    return { allowed: true, remainingFree: 0, credits: updated.credits };
+    return { allowed: true, remainingFree: 0, credits: updated.credits, usedType: "credit" };
   }
 
   await ref.set(data, { merge: true }); // persist reset even if we're not consuming
-  return { allowed: false, remainingFree: 0, credits: data.credits };
+  return { allowed: false, remainingFree: 0, credits: data.credits, usedType: null };
+}
+
+// Gives back a unit that was consumed by consumeGeneration() when the actual
+// generation afterward failed (e.g. Gemini quota/rate-limit errors) — a user
+// should never lose a free generation or a paid credit for a request that
+// produced nothing.
+async function refundGeneration(uid, usedType) {
+  if (!usedType) return;
+  try {
+    const ref = firestore.collection("usage").doc(uid);
+    const snap = await ref.get();
+    if (!snap.exists) return;
+    const data = snap.data();
+    if (usedType === "free") {
+      await ref.set({ ...data, freeUsedToday: Math.max(0, (data.freeUsedToday || 0) - 1) }, { merge: true });
+    } else if (usedType === "credit") {
+      await ref.set({ ...data, credits: (data.credits || 0) + 1 }, { merge: true });
+    }
+  } catch (err) {
+    console.error("Failed to refund a generation unit for", uid, err);
+  }
 }
 
 // Files are kept in memory only (never written to disk) and capped at 20MB
@@ -112,7 +132,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 // Initialize Gemini Client
-const genAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 const QUESTION_SYSTEM_PROMPT = `You generate university-level quiz questions.
 Respond with ONLY a raw JSON array matching this exact structure:
@@ -143,6 +163,11 @@ app.post("/api/generate-quiz", requireAuth, async (req, res) => {
       return res.status(500).json({ error: "Server is missing GEMINI_API_KEY in .env file." });
     }
 
+    const { topic, count = 8 } = req.body || {};
+    if (!topic || typeof topic !== "string" || !topic.trim()) {
+      return res.status(400).json({ error: "A 'topic' string is required." });
+    }
+
     const usage = await consumeGeneration(req.uid);
     if (!usage.allowed) {
       return res.status(402).json({
@@ -151,29 +176,34 @@ app.post("/api/generate-quiz", requireAuth, async (req, res) => {
       });
     }
 
-    const { topic, count = 8 } = req.body || {};
-    if (!topic || typeof topic !== "string" || !topic.trim()) {
-      return res.status(400).json({ error: "A 'topic' string is required." });
-    }
-
     const numQuestions = Math.min(Math.max(parseInt(count, 10) || 8, 1), 25);
 
-    const userPrompt = `Generate ${numQuestions} quiz questions about: ${topic.trim()}`;
-    const result = await genAI.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: userPrompt,
-      config: {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: "gemini-3.6-flash",
         systemInstruction: QUESTION_SYSTEM_PROMPT,
-        responseMimeType: "application/json",
-      },
-    });
-    const textResponse = result.text;
-    const questions = JSON.parse(textResponse);
+        generationConfig: { responseMimeType: "application/json" },
+      });
 
-    res.json({ questions, remainingFree: usage.remainingFree, credits: usage.credits });
+      const userPrompt = `Generate ${numQuestions} quiz questions about: ${topic.trim()}`;
+      const result = await model.generateContent(userPrompt);
+      const textResponse = result.response.text();
+      const questions = JSON.parse(textResponse);
+
+      res.json({ questions, remainingFree: usage.remainingFree, credits: usage.credits });
+    } catch (genErr) {
+      // The unit was already consumed above — give it back since nothing was generated.
+      await refundGeneration(req.uid, usage.usedType);
+      throw genErr;
+    }
   } catch (err) {
     console.error("Gemini Topic API Error:", err);
-    res.status(500).json({ error: "Failed to generate quiz. Check server logs." });
+    const isQuotaError = /429|quota|rate.?limit/i.test(err.message || "");
+    res.status(isQuotaError ? 503 : 500).json({
+      error: isQuotaError
+        ? "We're experiencing high demand right now — your generation wasn't used, please try again in a minute."
+        : "Failed to generate quiz. Check server logs.",
+    });
   }
 });
 
@@ -186,17 +216,6 @@ app.post("/api/generate-quiz-from-file", requireAuth, upload.single("file"), asy
     if (!req.file) {
       return res.status(400).json({ error: "No file was uploaded." });
     }
-
-    const usage = await consumeGeneration(req.uid);
-    if (!usage.allowed) {
-      return res.status(402).json({
-        error: "You've used today's free generations. Buy more to keep going.",
-        code: "OUT_OF_GENERATIONS",
-      });
-    }
-
-    const count = req.body?.count;
-    const numQuestions = Math.min(Math.max(parseInt(count, 10) || 10, 1), 25);
 
     // Check both mimeType AND file extension (crucial for mobile uploads)
     const mimeType = req.file.mimetype;
@@ -211,57 +230,65 @@ app.post("/api/generate-quiz-from-file", requireAuth, upload.single("file"), asy
       });
     }
 
+    const usage = await consumeGeneration(req.uid);
+    if (!usage.allowed) {
+      return res.status(402).json({
+        error: "You've used today's free generations. Buy more to keep going.",
+        code: "OUT_OF_GENERATIONS",
+      });
+    }
+
+    const count = req.body?.count;
+    const numQuestions = Math.min(Math.max(parseInt(count, 10) || 10, 1), 25);
+
     const instruction = `This document is course material. Read it and generate ${numQuestions} quiz questions
 that test understanding of the curriculum covered in the document — concepts, definitions, facts,
 and reasoning it contains. Base every question strictly on content actually present in the document.`;
 
-    let extractedText;
+    const model = genAI.getGenerativeModel({
+      model: "gemini-3.6-flash",
+      systemInstruction: QUESTION_SYSTEM_PROMPT,
+      generationConfig: { responseMimeType: "application/json" },
+    });
+
+    let promptContents = [];
 
     if (isPdf) {
-      // Extract only the text layer from the PDF — Gemini never sees the
-      // original file, images, or layout, only the plain text pulled from it.
-      try {
-        const parsed = await pdfParse(req.file.buffer);
-        extractedText = parsed.text || "";
-      } catch (parseErr) {
-        console.error("PDF text extraction failed:", parseErr);
-        return res.status(400).json({
-          error: "Couldn't read text from this PDF. It may be scanned/image-based or corrupted.",
-        });
-      }
-      if (!extractedText.trim()) {
-        return res.status(400).json({
-          error: "No readable text was found in this PDF (it may be a scanned image without a text layer).",
-        });
-      }
+      // Send PDF buffer directly as base64 inlineData
+      promptContents.push({
+        inlineData: {
+          data: req.file.buffer.toString("base64"),
+          mimeType: "application/pdf",
+        },
+      });
+      promptContents.push(instruction);
     } else {
-      extractedText = req.file.buffer.toString("utf-8");
+      const fileText = req.file.buffer.toString("utf-8").slice(0, 100000);
+      promptContents.push(`${instruction}\n\nDOCUMENT CONTENT:\n"""\n${fileText}\n"""`);
     }
 
-    extractedText = extractedText.slice(0, 100000);
+    try {
+      const result = await model.generateContent(promptContents);
+      const textResponse = result.response.text();
+      const questions = JSON.parse(textResponse);
 
-    const promptContents = [
-      { text: `${instruction}\n\nDOCUMENT CONTENT:\n"""\n${extractedText}\n"""` },
-    ];
-
-    const result = await genAI.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: promptContents,
-      config: {
-        systemInstruction: QUESTION_SYSTEM_PROMPT,
-        responseMimeType: "application/json",
-      },
-    });
-    const textResponse = result.text;
-    const questions = JSON.parse(textResponse);
-
-    res.json({ questions, filename: req.file.originalname, remainingFree: usage.remainingFree, credits: usage.credits });
+      res.json({ questions, filename: req.file.originalname, remainingFree: usage.remainingFree, credits: usage.credits });
+    } catch (genErr) {
+      // The unit was already consumed above — give it back since nothing was generated.
+      await refundGeneration(req.uid, usage.usedType);
+      throw genErr;
+    }
   } catch (err) {
     console.error("Gemini File API Error:", err);
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({ error: "File is too large (20MB max)." });
     }
-    res.status(500).json({ error: "Failed to process document and generate quiz." });
+    const isQuotaError = /429|quota|rate.?limit/i.test(err.message || "");
+    res.status(isQuotaError ? 503 : 500).json({
+      error: isQuotaError
+        ? "We're experiencing high demand right now — your generation wasn't used, please try again in a minute."
+        : "Failed to process document and generate quiz.",
+    });
   }
 });
 
