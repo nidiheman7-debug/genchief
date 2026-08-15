@@ -6,7 +6,10 @@
   <title>Omega Prep</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-<!-- Page Title & Search Description -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#C8432A">
+<link rel="apple-touch-icon" href="/icon-192.png">
+  <!-- Page Title & Search Description -->
 <title>Omega Prep - AI Quiz & Practice Question Generator</title>
 <meta name="description" content="Generate practice quizzes and test questions instantly from topics or uploaded lecture PDFs. Built for university students.">
 <meta name="keywords" content="Omega Prep, AI quiz generator, university study tool, PDF quiz maker, exam practice">
@@ -392,6 +395,7 @@ body {
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
         </svg>
       </button>
+      <button id="install-app-btn" class="theme-toggle-btn" style="display:none" onclick="triggerInstall()">⬇</button>
     </div>
   </header>
   <div id="course-screen">
@@ -1412,7 +1416,37 @@ function sanitizeQuestions(questions) {
         setSigninError(friendlyAuthError(err));
       }
     }
+// Register service worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then((reg) => console.log('SW registered:', reg.scope))
+      .catch((err) => console.error('SW registration failed:', err));
+  });
+}
 
+// Capture install prompt so you can trigger it from your own button
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  const installBtn = document.getElementById('install-app-btn');
+  if (installBtn) installBtn.style.display = 'flex';
+});
+
+async function triggerInstall() {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  const { outcome } = await deferredInstallPrompt.userChoice;
+  console.log('Install outcome:', outcome);
+  deferredInstallPrompt = null;
+  const installBtn = document.getElementById('install-app-btn');
+  if (installBtn) installBtn.style.display = 'none';
+}
+
+window.addEventListener('appinstalled', () => {
+  console.log('Omega Prep installed');
+});
     // Try to initialize as soon as the GIS script is ready, so the first tap
     // of the button doesn't have to wait on it.
     window.addEventListener("load", () => { initGoogleIdentity(); });
