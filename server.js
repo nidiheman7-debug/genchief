@@ -432,6 +432,54 @@ app.get("/api/shared-quiz/:id", async (req, res) => {
 });
 
 // ── 8. Save a completed quiz so it can be revisited later ("Quizzes You've Done") ──
+// ── Leaderboard: ISO week helper — each week is its own Firestore subcollection,
+// so "resetting" is automatic (a new week just starts with an empty collection). ──
+// ── Leaderboard: anonymous, deterministic pseudonym per user — never their
+// real name or email, but always the same for them so they recognize their
+// own row week to week. ──
+const LB_ADJECTIVES = ["Clever","Swift","Bright","Quiet","Bold","Sharp","Calm","Eager","Wise","Brave","Nimble","Keen","Steady","Curious","Focused","Sunny","Lucky","Mighty","Gentle","Rapid"];
+const LB_NOUNS = ["Falcon","Panda","Tiger","Eagle","Otter","Wolf","Fox","Owl","Lion","Hawk","Bear","Dolphin","Cheetah","Raven","Lynx","Puma","Heron","Badger","Sparrow","Orca"];
+
+function anonymousName(uid) {
+  let hash = 0;
+  for (let i = 0; i < uid.length; i++) {
+    hash = (hash * 31 + uid.charCodeAt(i)) >>> 0;
+  }
+  const adj = LB_ADJECTIVES[hash % LB_ADJECTIVES.length];
+  const noun = LB_NOUNS[(hash >> 8) % LB_NOUNS.length];
+  const num = (hash % 90) + 10; // 10–99
+  return `${adj} ${noun} ${num}`;
+}
+
+// Returns the name to show on the leaderboard for this user — their own
+// chosen nickname if they've set one, otherwise the anonymous generated one.
+async function getDisplayName(uid) {
+  try {
+    const snap = await firestore.collection("usage").doc(uid).get();
+    const custom = snap.exists ? (snap.data().leaderboardName || "").trim() : "";
+    return custom || anonymousName(uid);
+  } catch (e) {
+    return anonymousName(uid);
+  }
+}
+
+// Keeps a valid nickname reasonably clean: letters, numbers, spaces, a few
+// basic punctuation marks, 2–20 characters.
+function sanitizeLeaderboardName(raw) {
+  const trimmed = (raw || "").trim().slice(0, 20);
+  const cleaned = trimmed.replace(/[^a-zA-Z0-9 _.'-]/g, "");
+  return cleaned.trim();
+}
+
+function getWeekId(date = new Date()) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, "0")}`;
+}
+
 app.post("/api/completed-quiz", requireAuth, async (req, res) => {
   try {
     if (!firestore) return res.status(500).json({ error: "This feature isn't set up yet." });
@@ -447,10 +495,102 @@ app.post("/api/completed-quiz", requireAuth, async (req, res) => {
       pct: pct ?? null,
       completedAt: new Date().toISOString(),
     });
+
+    // Award 3 points per correctly answered question toward this week's leaderboard.
+    const POINTS_PER_CORRECT = 3;
+    if (typeof score === "number" && score > 0) {
+      const weekId = getWeekId();
+      const displayName = await getDisplayName(req.uid);
+      const boardRef = firestore.collection("leaderboard").doc(weekId).collection("scores").doc(req.uid);
+      await firestore.runTransaction(async (tx) => {
+        const snap = await tx.get(boardRef);
+        const current = snap.exists ? snap.data().points || 0 : 0;
+        tx.set(boardRef, { displayName, points: current + (score * POINTS_PER_CORRECT), updatedAt: new Date().toISOString() }, { merge: true });
+      });
+    }
+
     res.json({ saved: true });
   } catch (err) {
     console.error("Save completed quiz error:", err);
     res.status(500).json({ error: "Couldn't save this quiz. Try again." });
+  }
+});
+
+// ── Leaderboard: top scorers for the current week, plus the signed-in user's own rank ──
+// ── Read/set a custom leaderboard nickname (optional — falls back to the
+// anonymous generated one if never set or cleared). ──
+app.get("/api/leaderboard-name", requireAuth, async (req, res) => {
+  try {
+    if (!firestore) return res.status(500).json({ error: "This feature isn't set up yet." });
+    const snap = await firestore.collection("usage").doc(req.uid).get();
+    const custom = snap.exists ? (snap.data().leaderboardName || "") : "";
+    res.json({ customName: custom, generatedName: anonymousName(req.uid) });
+  } catch (err) {
+    console.error("Get leaderboard name error:", err);
+    res.status(500).json({ error: "Couldn't load your nickname." });
+  }
+});
+
+app.post("/api/leaderboard-name", requireAuth, async (req, res) => {
+  try {
+    if (!firestore) return res.status(500).json({ error: "This feature isn't set up yet." });
+    const clean = sanitizeLeaderboardName((req.body || {}).name);
+    if (clean && clean.length < 2) {
+      return res.status(400).json({ error: "Nickname must be at least 2 characters." });
+    }
+
+    const usageRef = firestore.collection("usage").doc(req.uid);
+    await usageRef.set({ leaderboardName: clean }, { merge: true });
+
+    // Update this week's leaderboard entry immediately, if one already exists,
+    // so the change is reflected right away instead of waiting for the next quiz.
+    const weekId = getWeekId();
+    const boardRef = firestore.collection("leaderboard").doc(weekId).collection("scores").doc(req.uid);
+    const boardSnap = await boardRef.get();
+    if (boardSnap.exists) {
+      await boardRef.set({ displayName: clean || anonymousName(req.uid) }, { merge: true });
+    }
+
+    res.json({ displayName: clean || anonymousName(req.uid) });
+  } catch (err) {
+    console.error("Set leaderboard name error:", err);
+    res.status(500).json({ error: "Couldn't save your nickname. Try again." });
+  }
+});
+
+app.get("/api/leaderboard", requireAuth, async (req, res) => {
+  try {
+    if (!firestore) return res.status(500).json({ error: "This feature isn't set up yet." });
+    const weekId = getWeekId();
+    const snap = await firestore
+      .collection("leaderboard")
+      .doc(weekId)
+      .collection("scores")
+      .orderBy("points", "desc")
+      .limit(20)
+      .get();
+
+    const top = snap.docs.map((doc, i) => ({ rank: i + 1, uid: doc.id, ...doc.data() }));
+
+    let me = top.find((r) => r.uid === req.uid) || null;
+    if (!me) {
+      const mySnap = await firestore.collection("leaderboard").doc(weekId).collection("scores").doc(req.uid).get();
+      if (mySnap.exists) {
+        // Not in the top 20 — figure out actual rank by counting how many people score higher.
+        const higherSnap = await firestore
+          .collection("leaderboard")
+          .doc(weekId)
+          .collection("scores")
+          .where("points", ">", mySnap.data().points)
+          .get();
+        me = { rank: higherSnap.size + 1, uid: req.uid, ...mySnap.data() };
+      }
+    }
+
+    res.json({ weekId, top, me });
+  } catch (err) {
+    console.error("Leaderboard fetch error:", err);
+    res.status(500).json({ error: "Couldn't load the leaderboard right now." });
   }
 });
 
