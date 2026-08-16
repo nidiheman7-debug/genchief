@@ -6,10 +6,7 @@
   <title>Omega Prep</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-<link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#C8432A">
-<link rel="apple-touch-icon" href="/icon-192.png">
-  <!-- Page Title & Search Description -->
+<!-- Page Title & Search Description -->
 <title>Omega Prep - AI Quiz & Practice Question Generator</title>
 <meta name="description" content="Generate practice quizzes and test questions instantly from topics or uploaded lecture PDFs. Built for university students.">
 <meta name="keywords" content="Omega Prep, AI quiz generator, university study tool, PDF quiz maker, exam practice">
@@ -270,6 +267,24 @@ body {
     .sub-title  { font-family:var(--serif); font-size:clamp(28px,6vw,42px); font-weight:900; color:var(--ink); }
 
     .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:16px; margin-bottom:8px; }
+
+    .lb-row {
+      display:flex; align-items:center; gap:14px; padding:12px 4px;
+      border-bottom:1px solid var(--rule);
+      font-family:var(--sans);
+    }
+    .lb-row:last-child { border-bottom:none; }
+    .lb-rank {
+      width:28px; font-weight:700; color:var(--muted); font-size:14px; flex-shrink:0; text-align:center;
+    }
+    .lb-rank.top3 { color:var(--accent); }
+    .lb-name { flex:1; font-size:14px; color:var(--ink); }
+    .lb-points { font-weight:700; font-size:14px; color:var(--ink); }
+    .lb-me-row {
+      background:rgba(200,67,42,.07); border:1px solid var(--accent);
+      display:flex; align-items:center; gap:14px; padding:12px 14px; margin-bottom:14px;
+      font-family:var(--sans);
+    }
     .stat-card  { border:1px solid var(--rule); padding:20px; }
     .stat-num   { font-family:var(--serif); font-size:clamp(30px,6vw,40px); font-weight:900; color:var(--ink); line-height:1; margin-bottom:6px; }
     .stat-lbl   { font-family:var(--sans); font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--muted); }
@@ -395,7 +410,6 @@ body {
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
         </svg>
       </button>
-      <button id="install-app-btn" class="theme-toggle-btn" style="display:none" onclick="triggerInstall()">⬇</button>
     </div>
   </header>
   <div id="course-screen">
@@ -485,6 +499,13 @@ body {
       <div class="sub-title">Stats</div>
     </div>
     <div class="stats-grid" id="stats-grid"></div>
+
+    <div style="margin-top:40px; border-top:1px solid var(--rule); padding-top:24px;">
+      <div class="masthead-label" style="margin-bottom:6px;">This Week's Leaderboard</div>
+      <div class="empty-note" style="margin-bottom:16px;">3 points per correctly answered question &middot; resets every week</div>
+      <div id="leaderboard-me" style="display:none;"></div>
+      <div id="leaderboard-list"></div>
+    </div>
   </div>
 
   <!-- ── History screen ── -->
@@ -543,6 +564,18 @@ body {
           <div class="account-sub">Signed in</div>
         </div>
       </div>
+
+      <div style="margin-top:28px; border-top:1px solid var(--rule); padding-top:20px; max-width:360px;">
+        <div class="masthead-label" style="margin-bottom:6px;">Leaderboard Nickname</div>
+        <div class="empty-note" style="margin-bottom:14px;">Shown instead of your name so scores stay anonymous. Leave blank to use a randomly generated one.</div>
+        <div style="display:flex; gap:8px;">
+          <input id="nickname-input" type="text" maxlength="20" placeholder="e.g. MathWizard"
+            style="flex:1; font-family:var(--sans); font-size:14px; padding:11px 12px; border:1px solid var(--rule); background:transparent; color:var(--ink);" />
+          <button type="button" id="nickname-save-btn" class="submit-btn" style="padding:11px 18px;">Save</button>
+        </div>
+        <div id="nickname-status" style="font-family:var(--sans); font-size:12px; color:var(--muted); margin-top:8px;"></div>
+      </div>
+
       <button type="button" class="submit-btn" id="signout-btn" style="padding:13px 28px; margin-top:20px;">Sign Out</button>
     </div>
   </div>
@@ -669,6 +702,7 @@ body {
       localStorage.setItem("aiQuestionsGenerated", String(total));
     }
     function renderStats() {
+      loadLeaderboard();
       const hist = getHistory();
       const grid = document.getElementById("stats-grid");
       const aiGenerated = getAIGeneratedCount();
@@ -694,6 +728,106 @@ body {
         <div class="stat-card"><div class="stat-num">${aiGenerated}</div><div class="stat-lbl">AI Questions Generated</div></div>
       `;
     }
+    async function loadNicknameField() {
+      const input = document.getElementById("nickname-input");
+      const status = document.getElementById("nickname-status");
+      if (!input) return;
+      const token = await getAuthToken();
+      if (!token) return;
+      try {
+        const res = await fetch("/api/leaderboard-name", { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if (res.ok) {
+          input.value = data.customName || "";
+          input.placeholder = data.generatedName || "e.g. MathWizard";
+          status.textContent = data.customName
+            ? ""
+            : `Currently showing as "${data.generatedName}"`;
+        }
+      } catch (e) {
+        // silent — field just stays empty
+      }
+    }
+
+    async function saveNickname() {
+      const input = document.getElementById("nickname-input");
+      const status = document.getElementById("nickname-status");
+      const btn = document.getElementById("nickname-save-btn");
+      const token = await getAuthToken();
+      if (!token) return;
+
+      btn.disabled = true;
+      const originalLabel = btn.textContent;
+      btn.textContent = "Saving…";
+      try {
+        const res = await fetch("/api/leaderboard-name", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ name: input.value }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Couldn't save your nickname.");
+        status.textContent = input.value.trim()
+          ? `Saved! You'll show as "${data.displayName}" on the leaderboard.`
+          : `Cleared — you'll show as "${data.displayName}" (randomly generated).`;
+      } catch (err) {
+        status.textContent = err.message || "Couldn't save your nickname. Try again.";
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+      }
+    }
+    document.getElementById("nickname-save-btn").addEventListener("click", saveNickname);
+
+    async function loadLeaderboard() {
+      const listEl = document.getElementById("leaderboard-list");
+      const meEl = document.getElementById("leaderboard-me");
+      if (!listEl) return;
+
+      const token = await getAuthToken();
+      if (!token) {
+        listEl.innerHTML = '<div class="empty-note">Sign in and answer some questions to appear on the leaderboard.</div>';
+        meEl.style.display = "none";
+        return;
+      }
+
+      listEl.innerHTML = '<div class="empty-note">Loading…</div>';
+      try {
+        const res = await fetch("/api/leaderboard", { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        if (!res.ok) { listEl.innerHTML = '<div class="empty-note">Couldn\'t load the leaderboard right now.</div>'; return; }
+
+        if (!data.top || !data.top.length) {
+          listEl.innerHTML = '<div class="empty-note">No one has scored points this week yet — be the first!</div>';
+          meEl.style.display = "none";
+          return;
+        }
+
+        listEl.innerHTML = data.top.map((r) => `
+          <div class="lb-row">
+            <div class="lb-rank ${r.rank<=3?'top3':''}">${r.rank}</div>
+            <div class="lb-name">${r.displayName}</div>
+            <div class="lb-points">${r.points} pts</div>
+          </div>
+        `).join("");
+
+        const meInTop = data.top.some((r) => r.uid === (data.me && data.me.uid));
+        if (data.me && !meInTop) {
+          meEl.style.display = "block";
+          meEl.className = "lb-me-row";
+          meEl.innerHTML = `
+            <div class="lb-rank top3">${data.me.rank}</div>
+            <div class="lb-name">${data.me.displayName} (You)</div>
+            <div class="lb-points">${data.me.points} pts</div>
+          `;
+        } else {
+          meEl.style.display = "none";
+        }
+      } catch (e) {
+        listEl.innerHTML = '<div class="empty-note">Couldn\'t load the leaderboard right now.</div>';
+      }
+    }
+
     let historySelectMode = false;
     let selectedHistoryIdx = new Set();
 
@@ -1416,37 +1550,7 @@ function sanitizeQuestions(questions) {
         setSigninError(friendlyAuthError(err));
       }
     }
-// Register service worker
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js')
-      .then((reg) => console.log('SW registered:', reg.scope))
-      .catch((err) => console.error('SW registration failed:', err));
-  });
-}
 
-// Capture install prompt so you can trigger it from your own button
-let deferredInstallPrompt = null;
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredInstallPrompt = e;
-  const installBtn = document.getElementById('install-app-btn');
-  if (installBtn) installBtn.style.display = 'flex';
-});
-
-async function triggerInstall() {
-  if (!deferredInstallPrompt) return;
-  deferredInstallPrompt.prompt();
-  const { outcome } = await deferredInstallPrompt.userChoice;
-  console.log('Install outcome:', outcome);
-  deferredInstallPrompt = null;
-  const installBtn = document.getElementById('install-app-btn');
-  if (installBtn) installBtn.style.display = 'none';
-}
-
-window.addEventListener('appinstalled', () => {
-  console.log('Omega Prep installed');
-});
     // Try to initialize as soon as the GIS script is ready, so the first tap
     // of the button doesn't have to wait on it.
     window.addEventListener("load", () => { initGoogleIdentity(); });
@@ -1509,6 +1613,7 @@ window.addEventListener('appinstalled', () => {
           badgeBtn.title = user.email || "Account";
           refreshUsageDisplay();
           loadDoneQuizzes();
+          loadNicknameField();
         } else {
           formWrap.style.display    = "block";
           accountWrap.style.display = "none";
