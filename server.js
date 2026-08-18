@@ -154,7 +154,7 @@ Never use LaTeX or math markup (no $, $$, \(, \[, or similar delimiters). Write 
 - Roots: use the actual √ symbol, e.g. "√16" — never the word "sqrt".
 - Simple fractions and derivatives: a plain slash is fine, e.g. "dy/dx", "5/8".
 - Multiplication: use × or juxtaposition, not *.
-- Subscripts: use subscript instead of, e.g. C₆H₁₂O₆, aₙ, x₁ and x₂ - never use dash like "M_2".
+- Subscripts: always use actual subscript characters, e.g. C₆H₁₂O₆, aₙ, x₁, and x₂. Never use hyphens (-) or underscores (_) for subscripts.
 Never use LaTeX commands, dollar-sign wrappers, or caret/asterisk notation for anything a real math symbol exists for.`;
 
 // Gemini tends to put the correct option in the same slot (usually index 0)
