@@ -13,6 +13,16 @@
 <meta name="google-site-verification" content="google14cc64f9848e3173">
 <!-- Ensure Google Crawlers Are Allowed -->
 <meta name="robots" content="index, follow">
+<!-- PWA installability: manifest + icons + theme color. A service worker
+     (registered further down) is also required by Chrome/Android before it
+     will fire beforeinstallprompt. -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#C8432A">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Omega Prep">
   
   <style>
     :root {
@@ -217,6 +227,13 @@ body {
       transition:background .2s, transform .15s;
     }
     .submit-btn:hover { background:#333; transform:translateY(-1px); }
+    .submit-btn:disabled, .action-btn:disabled { opacity:.75; cursor:default; transform:none; }
+    .btn-spinner {
+      display:inline-block; width:12px; height:12px; margin-right:8px; vertical-align:-2px;
+      border:2px solid currentColor; border-right-color:transparent; border-radius:50%;
+      animation:btn-spin .7s linear infinite;
+    }
+    @keyframes btn-spin { to { transform:rotate(360deg); } }
     .result-msg { font-family:var(--sans); font-size:12px; font-weight:600; letter-spacing:1px; line-height:1.5; flex:1; animation:fadeUp .3s ease; }
     .result-msg.correct { color:var(--correct); }
     .result-msg.wrong   { color:var(--wrong); }
@@ -429,7 +446,7 @@ body {
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="m12 2 1.9 5.8L20 10l-6.1 2.2L12 18l-1.9-5.8L4 10l6.1-2.2Z"/><path d="M19 15l.7 2.1L22 18l-2.3.9L19 21l-.7-2.1L16 18l2.3-.9Z"/></svg>
         Generate a Quiz with AI
       </div>
-      <div id="usage-indicator" style="font-family:var(--sans); font-size:12px; color:var(--muted); margin-bottom:14px;">Sign in to generate quizzes — 5 free every day.</div>
+      <div id="usage-indicator" style="font-family:var(--sans); font-size:12px; color:var(--muted); margin-bottom:14px;">Sign in to generate quizzes — 3 free every day.</div>
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
         <input id="ai-topic-input" type="text" placeholder="Enter any topic e.g. World War II, Python loops, Cell Biology"
           style="flex:1; min-width:220px; font-family:var(--sans); font-size:14px; padding:12px 14px; border:1px solid var(--rule); background:transparent; color:var(--ink);" />
@@ -1301,9 +1318,7 @@ function sanitizeQuestions(questions) {
       if (!token) { navGo("signin"); return; }
 
       const btn = document.getElementById("more-questions-btn");
-      const originalLabel = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = "Generating…";
+      setBtnLoading(btn, "Generating…");
       const addCount = course.aiCount || 10;
 
       try {
@@ -1337,7 +1352,6 @@ function sanitizeQuestions(questions) {
         course.questions = course.questions.concat(newQuestions);
         addAIGeneratedCount(newQuestions.length);
         buildGrid();
-        refreshUsageDisplay();
 
         // Continue the same quiz — score and prior answers carry over,
         // picking up right where the new questions begin.
@@ -1347,13 +1361,27 @@ function sanitizeQuestions(questions) {
       } catch (err) {
         alert(err.message || "Something went wrong generating more questions. Try again.");
       } finally {
-        btn.disabled = false;
-        btn.textContent = originalLabel;
+        clearBtnLoading(btn);
+        refreshUsageDisplay();
       }
     }
 
     function retryQuiz(){ startQuiz(activeCourse); }
     function goHome(){ activeCourse=null; showScreen("course"); }
+
+    // ── Shared button loading-spinner helper ──
+    function setBtnLoading(btn, loadingText) {
+      if (!btn.dataset.originalHtml) btn.dataset.originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="btn-spinner"></span>${loadingText}`;
+    }
+    function clearBtnLoading(btn) {
+      btn.disabled = false;
+      if (btn.dataset.originalHtml !== undefined) {
+        btn.innerHTML = btn.dataset.originalHtml;
+        delete btn.dataset.originalHtml;
+      }
+    }
 
     // ── AI-generated quizzes ──
     async function generateAIQuiz() {
@@ -1372,9 +1400,7 @@ function sanitizeQuestions(questions) {
         return;
       }
 
-      btn.disabled = true;
-      const originalLabel = btn.textContent;
-      btn.textContent = "Generating…";
+      setBtnLoading(btn, "Generating…");
       status.textContent = "Asking the AI to write your quiz — this can take a few seconds.";
 
       try {
@@ -1406,13 +1432,15 @@ function sanitizeQuestions(questions) {
         buildGrid();
         status.textContent = "";
         topicInput.value = "";
-        refreshUsageDisplay();
         startQuiz(courses.length - 1);
       } catch (err) {
         status.textContent = err.message || "Something went wrong. Try again.";
       } finally {
-        btn.disabled = false;
-        btn.textContent = originalLabel;
+        clearBtnLoading(btn);
+        // Always resync with the server's real usage count — whether this
+        // generation succeeded, failed, or was refunded, this is the only
+        // way the UI shows the true remaining balance instead of a stale one.
+        refreshUsageDisplay();
       }
     }
     document.getElementById("ai-generate-btn").addEventListener("click", generateAIQuiz);
@@ -1433,9 +1461,7 @@ function sanitizeQuestions(questions) {
         return;
       }
 
-      btn.disabled = true;
-      const originalLabel = btn.textContent;
-      btn.textContent = "Analysing…";
+      setBtnLoading(btn, "Analysing…");
       status.textContent = "Reading the file and writing questions from its content — this can take a bit longer for big documents.";
 
       try {
@@ -1471,13 +1497,12 @@ function sanitizeQuestions(questions) {
         buildGrid();
         status.textContent = "";
         fileInput.value = "";
-        refreshUsageDisplay();
         startQuiz(courses.length - 1);
       } catch (err) {
         status.textContent = err.message || "Something went wrong. Try again.";
       } finally {
-        btn.disabled = false;
-        btn.textContent = originalLabel;
+        clearBtnLoading(btn);
+        refreshUsageDisplay();
       }
     }
     document.getElementById("ai-file-generate-btn").addEventListener("click", generateAIQuizFromFile);
@@ -1519,7 +1544,7 @@ function sanitizeQuestions(questions) {
       const email = document.getElementById("signin-email").value.trim();
       const password = document.getElementById("signin-password").value;
       const btn = document.getElementById("signin-submit-btn");
-      btn.disabled = true;
+      setBtnLoading(btn, authMode === "signup" ? "Creating account…" : "Signing in…");
       try {
         if (authMode === "signup") {
           await auth.createUserWithEmailAndPassword(email, password);
@@ -1529,7 +1554,7 @@ function sanitizeQuestions(questions) {
       } catch (err) {
         setSigninError(friendlyAuthError(err));
       } finally {
-        btn.disabled = false;
+        clearBtnLoading(btn);
       }
     });
 
@@ -1555,11 +1580,15 @@ function sanitizeQuestions(questions) {
     async function handleGoogleCredential(response) {
       setSigninError("");
       if (!auth) { setSigninError("Sign-in isn't set up yet — add your Firebase config to enable this."); return; }
+      const googleBtn = document.getElementById("google-signin-btn");
+      setBtnLoading(googleBtn, "Signing in…");
       try {
         const credential = firebase.auth.GoogleAuthProvider.credential(response.credential);
         await auth.signInWithCredential(credential);
       } catch (err) {
         setSigninError(friendlyAuthError(err));
+      } finally {
+        clearBtnLoading(googleBtn);
       }
     }
 
@@ -1604,6 +1633,32 @@ function sanitizeQuestions(questions) {
       if (auth) auth.signOut();
     });
 
+    // ── Avatar: initials + a color that's random-looking but stable per
+    // account (same user always gets the same color, instead of it changing
+    // every time they load the page). ──
+    const AVATAR_PALETTE = [
+      "#C8432A", "#2D6A4F", "#1D4E89", "#8E5B3D", "#6A4C93",
+      "#B5546B", "#3A7CA5", "#A6631B", "#4C6444", "#7A4E9E",
+    ];
+    function avatarColorFor(uid) {
+      let hash = 0;
+      const key = uid || "?";
+      for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+      return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+    }
+    function avatarInitialsFor(user) {
+      const name = (user.displayName || "").trim();
+      if (name) {
+        const parts = name.split(/\s+/).filter(Boolean);
+        if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        return parts[0].slice(0, 2).toUpperCase();
+      }
+      const local = (user.email || "").split("@")[0] || "?";
+      const segs = local.split(/[._\-+]/).filter(Boolean);
+      if (segs.length >= 2) return (segs[0][0] + segs[1][0]).toUpperCase();
+      return local.slice(0, 2).toUpperCase() || "?";
+    }
+
     if (auth) {
       auth.onAuthStateChanged((user) => {
         const formWrap    = document.getElementById("signin-form-wrap");
@@ -1611,17 +1666,24 @@ function sanitizeQuestions(questions) {
         const badgeBtn     = document.getElementById("account-badge-btn");
         const badgeIcon    = document.getElementById("account-badge-icon");
         const badgeInitial = document.getElementById("account-badge-initial");
+        const avatarEl     = document.getElementById("account-avatar");
         if (user) {
           formWrap.style.display    = "none";
           accountWrap.style.display = "block";
           document.getElementById("signin-title").textContent = "Your Account";
           document.getElementById("account-email").textContent = user.email || "Signed in";
-          const initial = (user.email || "?").charAt(0).toUpperCase();
-          document.getElementById("account-avatar").textContent = initial;
-          badgeInitial.textContent = initial;
+          const initials = avatarInitialsFor(user);
+          const color = avatarColorFor(user.uid);
+          avatarEl.textContent = initials;
+          avatarEl.style.background = color;
+          avatarEl.style.color = "#fff";
+          badgeInitial.textContent = initials;
           badgeIcon.style.display = "none";
           badgeInitial.style.display = "block";
           badgeBtn.classList.add("signed-in");
+          badgeBtn.style.background = color;
+          badgeBtn.style.borderColor = color;
+          badgeBtn.style.color = "#fff";
           badgeBtn.title = user.email || "Account";
           refreshUsageDisplay();
           loadDoneQuizzes();
@@ -1633,9 +1695,14 @@ function sanitizeQuestions(questions) {
           badgeIcon.style.display = "block";
           badgeInitial.style.display = "none";
           badgeBtn.classList.remove("signed-in");
+          badgeBtn.style.background = "";
+          badgeBtn.style.borderColor = "";
+          badgeBtn.style.color = "";
           badgeBtn.title = "Sign In";
+          avatarEl.style.background = "";
+          avatarEl.style.color = "";
           const usageEl = document.getElementById("usage-indicator");
-          if (usageEl) usageEl.textContent = "Sign in to generate quizzes — 5 free every day.";
+          if (usageEl) usageEl.textContent = "Sign in to generate quizzes — 3 free every day.";
           loadDoneQuizzes();
         }
       });
@@ -1660,7 +1727,7 @@ function sanitizeQuestions(questions) {
       if (!usageEl) return;
 
       if (!auth || !auth.currentUser) {
-        usageEl.textContent = "Sign in to generate quizzes — 5 free every day.";
+        usageEl.textContent = "Sign in to generate quizzes — 3 free every day.";
         return;
       }
 
@@ -1801,12 +1868,31 @@ function sanitizeQuestions(questions) {
     handleSharedQuizLink();
     loadDoneQuizzes();
     // Self-contained theme management system
+// ── Service worker registration ──
+// Chrome/Android will not fire beforeinstallprompt at all unless a service
+// worker is active, so this has to run before the install button can work.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/service-worker.js").catch((err) => {
+      console.warn("Service worker registration failed:", err);
+    });
+  });
+}
+
 // ── Custom "Install App" button ──
 // Chrome's automatic install banner is unreliable, so we capture the event
 // ourselves and show our own button instead, only when Chrome confirms the
 // site is actually installable right now (not already installed).
+// iOS Safari never fires beforeinstallprompt (Apple doesn't support the
+// API), so it gets its own manual "Add to Home Screen" instructions instead.
 let deferredInstallPrompt = null;
 const installBtn = document.getElementById("install-app-btn");
+
+const isStandaloneAlready =
+  window.matchMedia("(display-mode: standalone)").matches ||
+  window.navigator.standalone === true;
+
+const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
 
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
@@ -1820,12 +1906,24 @@ window.addEventListener("appinstalled", () => {
 });
 
 if (installBtn) {
+  if (isIos && !isStandaloneAlready) {
+    // No install-prompt event exists on iOS — show the button and explain
+    // the manual Share > Add to Home Screen steps instead.
+    installBtn.style.display = "flex";
+    installBtn.title = "Add to Home Screen";
+  }
+
   installBtn.addEventListener("click", async () => {
-    if (!deferredInstallPrompt) return;
-    deferredInstallPrompt.prompt();
-    await deferredInstallPrompt.userChoice;
-    deferredInstallPrompt = null;
-    installBtn.style.display = "none";
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      installBtn.style.display = "none";
+      return;
+    }
+    if (isIos) {
+      alert('To install Omega Prep: tap the Share icon in Safari\'s toolbar, then choose "Add to Home Screen".');
+    }
   });
 }
 
