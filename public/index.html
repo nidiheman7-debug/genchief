@@ -401,6 +401,13 @@ body {
       </svg>
     </div>
     <div class="app-header-actions">
+      <button id="install-app-btn" class="theme-toggle-btn" title="Install App" style="display:none;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </button>
       <button id="account-badge-btn" class="account-badge-btn" title="Account" onclick="navGo('signin')">
         <svg id="account-badge-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20c1.5-4 5-5.5 7.5-5.5s6 1.5 7.5 5.5"/></svg>
         <span id="account-badge-initial" style="display:none;"></span>
@@ -422,7 +429,7 @@ body {
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="m12 2 1.9 5.8L20 10l-6.1 2.2L12 18l-1.9-5.8L4 10l6.1-2.2Z"/><path d="M19 15l.7 2.1L22 18l-2.3.9L19 21l-.7-2.1L16 18l2.3-.9Z"/></svg>
         Generate a Quiz with AI
       </div>
-      <div id="usage-indicator" style="font-family:var(--sans); font-size:12px; color:var(--muted); margin-bottom:14px;">Sign in to generate quizzes — 3 free every day.</div>
+      <div id="usage-indicator" style="font-family:var(--sans); font-size:12px; color:var(--muted); margin-bottom:14px;">Sign in to generate quizzes — 5 free every day.</div>
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
         <input id="ai-topic-input" type="text" placeholder="Enter any topic e.g. World War II, Python loops, Cell Biology"
           style="flex:1; min-width:220px; font-family:var(--sans); font-size:14px; padding:12px 14px; border:1px solid var(--rule); background:transparent; color:var(--ink);" />
@@ -1794,6 +1801,34 @@ function sanitizeQuestions(questions) {
     handleSharedQuizLink();
     loadDoneQuizzes();
     // Self-contained theme management system
+// ── Custom "Install App" button ──
+// Chrome's automatic install banner is unreliable, so we capture the event
+// ourselves and show our own button instead, only when Chrome confirms the
+// site is actually installable right now (not already installed).
+let deferredInstallPrompt = null;
+const installBtn = document.getElementById("install-app-btn");
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  if (installBtn) installBtn.style.display = "flex";
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  if (installBtn) installBtn.style.display = "none";
+});
+
+if (installBtn) {
+  installBtn.addEventListener("click", async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    installBtn.style.display = "none";
+  });
+}
+
 const themeToggler = document.getElementById("theme-toggle");
 
 themeToggler.addEventListener("click", () => {
