@@ -16,7 +16,7 @@ const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 
 // ── Monetization config — change these two numbers whenever you like ──
 const FREE_DAILY_GENERATIONS = 3;
-const CREDIT_PACK = { credits: 5, amountKobo: 30000, label: "10 extra generations — ₦300" }; // amountKobo is in kobo (₦200 = 20000 kobo)
+const CREDIT_PACK = { credits: 10, amountKobo: 20000, label: "10 extra generations — ₦200" }; // amountKobo is in kobo (₦200 = 20000 kobo)
 
 // ── Firebase Admin SDK — verifies who's signed in and reads/writes their usage record ──
 // Set FIREBASE_SERVICE_ACCOUNT as an env var on Render containing the full JSON
