@@ -156,6 +156,33 @@ Never use LaTeX or math markup (no $, $$, \(, \[, or similar delimiters). Write 
 - Multiplication: use × or juxtaposition, not *.
 Never use LaTeX commands, dollar-sign wrappers, or caret/asterisk notation for anything a real math symbol exists for.`;
 
+// Gemini tends to put the correct option in the same slot (usually index 0)
+// almost every time, regardless of prompting. Rather than rely on the model,
+// shuffle each question's options ourselves and remap "correct" to match, so
+// the right answer lands in a random position every generation.
+function shuffleQuestionOptions(questions) {
+  if (!Array.isArray(questions)) return questions;
+  return questions.map((q) => {
+    if (!q || !Array.isArray(q.options) || q.options.length < 2) return q;
+    const correctIdx = typeof q.correct === "number" ? q.correct : parseInt(q.correct, 10);
+    const correctValue = q.options[correctIdx];
+
+    const indices = q.options.map((_, i) => i);
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    const shuffledOptions = indices.map((i) => q.options[i]);
+    const newCorrect = shuffledOptions.indexOf(correctValue);
+
+    return {
+      ...q,
+      options: shuffledOptions,
+      correct: newCorrect !== -1 ? newCorrect : correctIdx,
+    };
+  });
+}
+
 // ── 1. Generate Quiz from Topic ──
 app.post("/api/generate-quiz", requireAuth, async (req, res) => {
   try {
@@ -188,7 +215,7 @@ app.post("/api/generate-quiz", requireAuth, async (req, res) => {
           responseMimeType: "application/json",
         },
       });
-      const questions = JSON.parse(response.text);
+      const questions = shuffleQuestionOptions(JSON.parse(response.text));
 
       res.json({ questions, remainingFree: usage.remainingFree, credits: usage.credits });
     } catch (genErr) {
@@ -243,7 +270,17 @@ app.post("/api/generate-quiz-from-file", requireAuth, upload.single("file"), asy
 
     const instruction = `This document is course material. Read it and generate ${numQuestions} quiz questions
 that test understanding of the curriculum covered in the document — concepts, definitions, facts,
-and reasoning it contains. Base every question strictly on content actually present in the document.`;
+and reasoning it contains. Base every question strictly on content actually present in the document.
+
+If the document contains worked numerical examples, solved problems, or formulas applied to
+specific values (e.g. "Example 1", "Example 2" style calculations), you MUST include a good
+proportion of "mcq" questions that are themselves numerical problems: give a scenario with
+concrete numbers (reusing the values from the document's examples, or plausible new values that
+use the same formula/method), and require the student to compute a numeric answer. All four
+options must be numeric values in the correct unit, including plausible distractors (e.g. results
+from a common mistake such as forgetting to convert units, using the wrong formula variable, or a
+sign/rounding error) — do not skip past these numerical/calculation questions in favor of only
+definitions and concepts.`;
 
     let contents = [];
 
@@ -270,7 +307,7 @@ and reasoning it contains. Base every question strictly on content actually pres
           responseMimeType: "application/json",
         },
       });
-      const questions = JSON.parse(response.text);
+      const questions = shuffleQuestionOptions(JSON.parse(response.text));
 
       res.json({ questions, filename: req.file.originalname, remainingFree: usage.remainingFree, credits: usage.credits });
     } catch (genErr) {
