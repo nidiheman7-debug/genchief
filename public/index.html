@@ -1074,7 +1074,9 @@ function sanitizeQuestions(questions) {
 
       // Figure (diagram / PDF figure) shown above the options, if this question has one
       const figEl = document.getElementById("q-image");
-      const figSrc = (q.imgIdx !== undefined && q.imgIdx !== null && c.images) ? c.images[q.imgIdx] : null;
+      const figSrc = q.svg
+        ? "data:image/svg+xml;charset=utf-8," + encodeURIComponent(q.svg)
+        : ((q.imgIdx !== undefined && q.imgIdx !== null && c.images) ? c.images[q.imgIdx] : null);
       figEl.innerHTML = "";
       if (figSrc) {
         const im = new Image();
