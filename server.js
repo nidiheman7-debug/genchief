@@ -234,7 +234,7 @@ function cleanFigureFields(questions, mode) {
 
 const PDF_FIGURE_INSTRUCTION = `
 
-Figures: if the document contains diagrams, photos, charts or other figures that matter for the material, include some questions that can only be answered by looking at a figure (for example identifying a marked structure). For every such question add two extra fields: "page" (the 1-based page number of the PDF where the figure appears) and "figureBox" ([ymin, xmin, ymax, xmax], each from 0 to 1000, relative to that page, tightly around the figure and its marker labels but excluding its caption). The student will be shown only that cropped figure above the question, so refer to "the figure" or to its letters/numbers/arrows in the question text, never to page numbers, and never let the question text give away the answer. If a figure's labels are spelled out in words, ask about the function, location or relationships of the labelled structure instead of asking for its name. Questions that do not depend on a figure must not have these two fields.`;
+Figures: if the document contains diagrams, photos, charts or other figures that matter for the material, include at least two questions that can only be answered by looking at a figure (only if the document really has suitable figures) (for example identifying a marked structure). For every such question add two extra fields: "page" (the 1-based page number of the PDF where the figure appears) and "figureBox" ([ymin, xmin, ymax, xmax], each from 0 to 1000, relative to that page, tightly around the figure and its marker labels but excluding its caption). The student will be shown only that cropped figure above the question, so refer to "the figure" or to its letters/numbers/arrows in the question text, never to page numbers, and never let the question text give away the answer. If a figure's labels are spelled out in words, ask about the function, location or relationships of the labelled structure instead of asking for its name. Questions that do not depend on a figure must not have these two fields.`;
 
 const imageInstruction = (n) => `The attached image is study material (for example an anatomy or physiology diagram, a histology slide, a chart or a table). Generate ${n} quiz questions that can only be answered by looking at the image.
 - Use the labels, letters, numbers or arrows that appear in the image, e.g. "Which structure is indicated by the arrow labelled B?" or "The structure marked 3 is supplied by which nerve?".
@@ -242,6 +242,51 @@ const imageInstruction = (n) => `The attached image is study material (for examp
 - If the image has no markers, ask about visible features, regions or relationships instead.
 - The student sees the image above every question, so never mention page numbers, and never let one question's text give away another question's answer.
 - Base everything strictly on what is visible in the image plus standard textbook facts about those structures.`;
+
+
+// ── Simple SVG diagrams for topic quizzes ──
+// Gemini can draw small schematic diagrams as SVG text. We only keep ones that pass a strict
+// whitelist, and the browser shows them through <img> (which never runs scripts).
+const SVG_TAGS = new Set(["svg", "g", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "text", "tspan", "defs", "marker"]);
+const MAX_SVG_CHARS = 12000;
+const MAX_SVGS_PER_QUIZ = 8;
+
+function sanitizeSvg(svg) {
+  if (typeof svg !== "string") return null;
+  let s = svg.trim();
+  if (s.length < 40 || s.length > MAX_SVG_CHARS) return null;
+  if (!/^<svg[\s>]/i.test(s) || !/<\/svg>$/i.test(s)) return null;
+  if (/<!|<\?|javascript:|data:|@import|expression\s*\(|\bon[a-z]+\s*=|href\s*=|xlink|<style|url\s*\(\s*(?!#)/i.test(s)) return null;
+  const tags = s.match(/<\/?[a-zA-Z][\w:-]*/g) || [];
+  for (const t of tags) {
+    if (!SVG_TAGS.has(t.replace(/^<\/?/, "").toLowerCase())) return null;
+  }
+  if (!/xmlns\s*=/.test(s.slice(0, 200))) {
+    s = s.replace(/^<svg/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+  }
+  return s;
+}
+
+function cleanQuestionSvgs(questions) {
+  if (!Array.isArray(questions)) return questions;
+  let kept = 0;
+  return questions.map((q) => {
+    if (!q || typeof q !== "object" || q.svg === undefined) return q;
+    const { svg, ...rest } = q;
+    const clean = kept < MAX_SVGS_PER_QUIZ ? sanitizeSvg(svg) : null;
+    if (clean) { kept++; return { ...rest, svg: clean }; }
+    return rest;
+  });
+}
+
+const TOPIC_DIAGRAM_INSTRUCTION = `
+
+Diagrams: add an "svg" field to a question ONLY when the question truly cannot be asked properly without a picture (for example identifying marked structures on a schematic, reading a graph, or following a labelled flow). Most questions must NOT have an svg field; use it for at most 3 questions, and not at all if no question needs a diagram. The svg value must be one complete, simple schematic drawn as SVG code:
+- start with <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg"> and end with </svg>; under 8000 characters
+- use only these elements: svg, g, path, rect, circle, ellipse, line, polyline, polygon, text, tspan, defs, marker; give every shape explicit fill and stroke colours that look good on a white background; no styles, scripts, images or links
+- draw simplified shapes (a schematic, not a realistic picture), with text at least 12px
+- to ask the student to identify structures, mark them with letters A, B, C and so on (a letter in a small circle with a short leader line) and do NOT write the structure names inside the picture; the question text and options then name the structures
+- the picture must not give away the answer to its own question, and the question text must say what the picture shows (for example "In the diagram of a nephron, which part is marked C?")`;
 
 // ── 1. Generate Quiz from Topic ──
 app.post("/api/generate-quiz", requireAuth, async (req, res) => {
@@ -266,7 +311,7 @@ app.post("/api/generate-quiz", requireAuth, async (req, res) => {
     const numQuestions = Math.min(Math.max(parseInt(count, 10) || 8, 1), 25);
 
     try {
-      const userPrompt = `Generate ${numQuestions} quiz questions about: ${topic.trim()}`;
+      const userPrompt = `Generate ${numQuestions} quiz questions about: ${topic.trim()}` + TOPIC_DIAGRAM_INSTRUCTION;
       const response = await ai.models.generateContent({
         model: "gemini-3.6-flash",
         contents: userPrompt,
@@ -275,7 +320,7 @@ app.post("/api/generate-quiz", requireAuth, async (req, res) => {
           responseMimeType: "application/json",
         },
       });
-      const questions = shuffleQuestionOptions(JSON.parse(response.text));
+      const questions = cleanQuestionSvgs(shuffleQuestionOptions(JSON.parse(response.text)));
 
       res.json({ questions, remainingFree: usage.remainingFree, credits: usage.credits });
     } catch (genErr) {
@@ -512,7 +557,7 @@ app.post("/api/share-quiz", requireAuth, async (req, res) => {
     const shareId = Math.random().toString(36).slice(2, 10);
     await firestore.collection("sharedQuizzes").doc(shareId).set({
       name,
-      questions,
+      questions: cleanQuestionSvgs(questions),
       images: sanitizeImages(images),
       createdBy: req.uid,
       createdAt: new Date().toISOString(),
@@ -599,7 +644,7 @@ app.post("/api/completed-quiz", requireAuth, async (req, res) => {
     }
     await firestore.collection("completedQuizzes").doc(req.uid).collection("items").add({
       name,
-      questions,
+      questions: cleanQuestionSvgs(questions),
       images: cleanImages,
       hasImages: cleanImages.some(Boolean),
       score: score ?? null,
