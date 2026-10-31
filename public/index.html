@@ -176,6 +176,13 @@ body {
       background:var(--ink); padding:4px 10px; margin-bottom:14px; position:relative; z-index:1;
     }
 
+    .q-figure { margin:-12px 0 28px; text-align:center; position:relative; z-index:1; }
+    .q-figure img { max-width:100%; max-height:46vh; object-fit:contain; background:#fff; border:1px solid var(--rule); cursor:zoom-in; }
+    .q-figure .fig-tip { font-family:var(--sans); font-size:11px; color:var(--muted); margin-top:6px; }
+    .fig-overlay { position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,.92); overflow:auto; padding:56px 12px 24px; }
+    .fig-overlay img { width:100%; height:auto; background:#fff; display:block; margin:0 auto; cursor:zoom-in; }
+    .fig-overlay img.zoomed { width:220%; max-width:none; cursor:zoom-out; }
+    .fig-close { position:fixed; top:12px; right:12px; z-index:10000; padding:10px 16px; font-family:var(--sans); font-size:12px; font-weight:700; background:#fff; color:#000; border:0; cursor:pointer; }
     .q-text { font-size:clamp(18px,3.5vw,24px); line-height:1.5; color:var(--ink); margin-bottom:32px; position:relative; z-index:1; }
     .hint-btn {
       font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:1px;
@@ -464,13 +471,13 @@ body {
         Upload Your Notes
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-        <input id="ai-file-input" type="file" accept=".pdf,.txt,.md,text/plain,application/pdf"
+        <input id="ai-file-input" type="file" accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp,text/plain,application/pdf,image/jpeg,image/png,image/webp"
           style="flex:1; min-width:220px; font-family:var(--sans); font-size:13px; color:var(--ink);" />
         <input id="ai-file-count-input" type="number" min="3" max="25" value="10" title="Number of questions"
           style="width:70px; font-family:var(--sans); font-size:14px; padding:12px 10px; border:1px solid var(--rule); background:transparent; color:var(--ink);" />
         <button id="ai-file-generate-btn" class="submit-btn" style="padding:12px 28px;">Analyse &amp; Generate</button>
       </div>
-      <div class="course-meta" style="margin-top:8px;">PDF or plain text (.txt, .md), up to 20MB. Questions are drawn only from the file's content.</div>
+      <div class="course-meta" style="margin-top:8px;">PDF, image (JPG/PNG) or plain text (.txt, .md). Keep PDFs under 4MB. Questions are drawn only from the file's content, and figures are shown with the questions.</div>
       <div id="ai-file-status" style="font-family:var(--sans); font-size:12px; color:var(--muted); margin-top:12px;"></div>
     </div>
 
@@ -492,6 +499,7 @@ body {
     <div class="ghost-num" id="ghost-num"></div>
     <span class="type-badge" id="type-badge"></span>
     <p class="q-text" id="q-text"></p>
+    <div id="q-image" class="q-figure" style="display:none;"></div>
     <div id="hint-row" style="display:none; margin:-8px 0 20px;">
       <button id="hint-btn" class="hint-btn" onclick="toggleHint()">💡 Show Hint</button>
       <div id="hint-text" class="hint-text" style="display:none;"></div>
@@ -1029,12 +1037,13 @@ function sanitizeQuestions(questions) {
       loadDoneQuizzes();
     }
 
-    function startQuiz(courseOrIdx) {
+    async function startQuiz(courseOrIdx) {
       // Accepts either an array index (from the grid) or a direct course
       // object (from retry/share) — activeCourse is stored as the object
       // itself so it stays correct even if the courses array gets reordered
       // in the background (e.g. "Quizzes You've Done" refreshing) mid-quiz.
       const c = typeof courseOrIdx === "number" ? courses[courseOrIdx] : courseOrIdx;
+      if (c && c.isDoneQuiz && c.hasImages && !c.images) { await loadDoneQuizImages(c); }
       activeCourse = c; qIndex = 0; score = 0; quizAnswers = [];
       showScreen("quiz"); renderQuestion();
     }
@@ -1062,6 +1071,25 @@ function sanitizeQuestions(questions) {
       document.getElementById("ghost-num").textContent  = String(num).padStart(2,"0");
       document.getElementById("type-badge").textContent = q.type==="tf"?"True / False":"Multiple Choice";
       document.getElementById("q-text").innerHTML     = q.text;
+
+      // Figure (diagram / PDF figure) shown above the options, if this question has one
+      const figEl = document.getElementById("q-image");
+      const figSrc = (q.imgIdx !== undefined && q.imgIdx !== null && c.images) ? c.images[q.imgIdx] : null;
+      figEl.innerHTML = "";
+      if (figSrc) {
+        const im = new Image();
+        im.src = figSrc;
+        im.alt = "Figure for this question";
+        im.onclick = () => openFigure(figSrc);
+        figEl.appendChild(im);
+        const tip = document.createElement("div");
+        tip.className = "fig-tip";
+        tip.textContent = "Tap the figure to enlarge";
+        figEl.appendChild(tip);
+        figEl.style.display = "block";
+      } else {
+        figEl.style.display = "none";
+      }
 
       // Hint (only present on AI-generated questions for now — curated course-bank
       // questions don't have hints authored yet)
@@ -1190,7 +1218,7 @@ function sanitizeQuestions(questions) {
         await fetch("/api/completed-quiz", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ name: course.name, questions: course.questions, score, total, pct }),
+          body: JSON.stringify({ name: course.name, ...packImagesForSave(course), score, total, pct }),
         });
         loadDoneQuizzes();
       } catch (e) {
@@ -1228,6 +1256,7 @@ function sanitizeQuestions(questions) {
               code: "DONE",
               name: item.name,
               questions: item.questions,
+              hasImages: !!item.hasImages,
               isDoneQuiz: true,
               doneQuizId: item.id,
             });
@@ -1259,7 +1288,7 @@ function sanitizeQuestions(questions) {
         const res = await fetch("/api/share-quiz", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ name: course.name, questions: course.questions }),
+          body: JSON.stringify({ name: course.name, ...packImagesForSave(course) }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Couldn't create a shareable link.");
@@ -1296,7 +1325,7 @@ function sanitizeQuestions(questions) {
           const res = await fetch(`/api/shared-quiz/${encodeURIComponent(sharedId)}`);
           const data = await res.json();
           if (!res.ok) { alert(data.error || "This shared quiz link is invalid or has expired."); return; }
-          const newCourse = { code: "SHARED", name: data.name, questions: data.questions };
+          const newCourse = { code: "SHARED", name: data.name, questions: data.questions, images: data.images || [] };
           courses.push(newCourse);
           buildGrid();
           startQuiz(courses.length - 1);
@@ -1335,7 +1364,7 @@ function sanitizeQuestions(questions) {
           const data = await res.json();
           if (res.status === 402) throw new Error("You've used today's free generations. Buy more from the Home screen to keep going.");
           if (!res.ok) throw new Error(data.error || "Failed to generate more questions.");
-          newQuestions = data.questions;
+          newQuestions = await attachFigureData(course, course.sourceFile, data.questions);
         } else {
           const res = await fetch("/api/generate-quiz", {
             method: "POST",
@@ -1445,6 +1474,204 @@ function sanitizeQuestions(questions) {
     }
     document.getElementById("ai-generate-btn").addEventListener("click", generateAIQuiz);
 
+    // ── Figures: images for quiz questions ──
+    function isImageFile(f) {
+      return /^image\//.test(f.type) || /\.(png|jpe?g|webp|heic|heif)$/i.test(f.name);
+    }
+
+    function loadImageFromFile(file) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Couldn't read that image. Please use a JPG, PNG or WebP picture.")); };
+        img.src = url;
+      });
+    }
+
+    // Draws srcCanvas onto a white JPEG no bigger than maxSide px, shrinking until the
+    // data-URL fits in maxChars. Returns the smallest attempt if nothing fits.
+    function canvasToJpegDataUrl(srcCanvas, maxSide, maxChars) {
+      let side = maxSide, last = null;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const scale = Math.min(1, side / Math.max(srcCanvas.width, srcCanvas.height));
+        const w = Math.max(1, Math.round(srcCanvas.width * scale));
+        const hgt = Math.max(1, Math.round(srcCanvas.height * scale));
+        const c = document.createElement("canvas");
+        c.width = w; c.height = hgt;
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, hgt);
+        ctx.drawImage(srcCanvas, 0, 0, w, hgt);
+        for (const q of [0.82, 0.7, 0.6, 0.5]) {
+          last = c.toDataURL("image/jpeg", q);
+          if (last.length <= maxChars) return last;
+        }
+        side = Math.round(side * 0.8);
+      }
+      return last;
+    }
+
+    function dataUrlToBlob(dataUrl) {
+      const bin = atob(dataUrl.split(",")[1]);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return new Blob([arr], { type: "image/jpeg" });
+    }
+
+    // Shrinks an uploaded picture twice: a bigger copy for the AI (stays well under
+    // Vercel's 4.5MB request limit) and a smaller one that is shown with the questions.
+    async function prepareImageUpload(file) {
+      const img = await loadImageFromFile(file);
+      const src = document.createElement("canvas");
+      src.width = img.naturalWidth; src.height = img.naturalHeight;
+      src.getContext("2d").drawImage(img, 0, 0);
+      const geminiUrl = canvasToJpegDataUrl(src, 1600, 1500000);
+      const geminiFile = new File([dataUrlToBlob(geminiUrl)], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+      const display = canvasToJpegDataUrl(src, 1200, 190000);
+      return { geminiFile, display };
+    }
+
+    // pdf.js is only downloaded when a PDF quiz actually needs figures.
+    let pdfjsPromise = null;
+    function loadPdfJs() {
+      if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+      if (!pdfjsPromise) {
+        pdfjsPromise = new Promise((resolve, reject) => {
+          const s = document.createElement("script");
+          s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+          s.onload = () => {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+            resolve(window.pdfjsLib);
+          };
+          s.onerror = () => { pdfjsPromise = null; reject(new Error("Couldn't load the PDF viewer.")); };
+          document.head.appendChild(s);
+        });
+      }
+      return pdfjsPromise;
+    }
+
+    async function renderPdfPage(doc, pageNum) {
+      const page = await doc.getPage(pageNum);
+      const base = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: Math.min(3, 1400 / base.width) });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(viewport.width);
+      canvas.height = Math.round(viewport.height);
+      await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+      return canvas;
+    }
+
+    // box = [ymin, xmin, ymax, xmax] on a 0-1000 scale; adds a little padding
+    function cropCanvas(canvas, box) {
+      if (!box) return canvas;
+      const pad = 15;
+      const y0 = Math.max(0, box[0] - pad), x0 = Math.max(0, box[1] - pad);
+      const y1 = Math.min(1000, box[2] + pad), x1 = Math.min(1000, box[3] + pad);
+      const sx = Math.round(x0 / 1000 * canvas.width), sy = Math.round(y0 / 1000 * canvas.height);
+      const sw = Math.round((x1 - x0) / 1000 * canvas.width), sh = Math.round((y1 - y0) / 1000 * canvas.height);
+      if (sw < 80 || sh < 80) return canvas;
+      const c = document.createElement("canvas");
+      c.width = sw; c.height = sh;
+      c.getContext("2d").drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+      return c;
+    }
+
+    function stripFigureFields(q) {
+      const { page, figureBox, ...rest } = q;
+      return rest;
+    }
+
+    // Turns the "page"/"figureBox" hints from the AI into real figure images.
+    // Mutates images[] and keyMap so repeated figures are stored only once.
+    async function attachPdfFigures(file, questions, images, keyMap) {
+      if (!questions.some((q) => q.page)) return questions.map(stripFigureFields);
+      try {
+        const pdfjs = await loadPdfJs();
+        const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+        const out = [];
+        for (const q of questions) {
+          if (!q.page || q.page > doc.numPages) { out.push(stripFigureFields(q)); continue; }
+          const key = q.page + "|" + (q.figureBox ? q.figureBox.join(",") : "full");
+          if (keyMap[key] === undefined) {
+            if (images.length >= 12) { out.push(stripFigureFields(q)); continue; }
+            const pageCanvas = await renderPdfPage(doc, q.page);
+            const url = canvasToJpegDataUrl(cropCanvas(pageCanvas, q.figureBox), 1100, 190000);
+            pageCanvas.width = 0; pageCanvas.height = 0;
+            images.push(url);
+            keyMap[key] = images.length - 1;
+          }
+          out.push({ ...stripFigureFields(q), imgIdx: keyMap[key] });
+        }
+        return out;
+      } catch (e) {
+        console.error("Couldn't build PDF figures:", e);
+        return questions.map(stripFigureFields); // quiz still works, just without figures
+      }
+    }
+
+    async function attachFigureData(course, file, questions) {
+      course.images = course.images || [];
+      course.imageKeys = course.imageKeys || {};
+      if (isImageFile(file)) {
+        if (!course.images[0]) return questions;
+        return questions.map((q) => ({ ...stripFigureFields(q), imgIdx: 0 }));
+      }
+      if (/pdf/i.test(file.type) || /\.pdf$/i.test(file.name)) {
+        return attachPdfFigures(file, questions, course.images, course.imageKeys);
+      }
+      return questions;
+    }
+
+    // Picks which images fit the server's storage budget and renumbers imgIdx to match.
+    function packImagesForSave(course) {
+      const imgs = course.images || [];
+      const used = [];
+      course.questions.forEach((q) => {
+        if (q.imgIdx !== undefined && q.imgIdx !== null && imgs[q.imgIdx] && !used.includes(q.imgIdx)) used.push(q.imgIdx);
+      });
+      if (!used.length) return { questions: course.questions, images: [] };
+      const keep = [];
+      let total = 0;
+      for (const i of used) {
+        if (keep.length < 8 && total + imgs[i].length <= 780000) { keep.push(i); total += imgs[i].length; }
+      }
+      const remap = new Map(keep.map((old, n) => [old, n]));
+      const questions = course.questions.map((q) => {
+        if (q.imgIdx === undefined || q.imgIdx === null) return q;
+        const { imgIdx, ...rest } = q;
+        return remap.has(imgIdx) ? { ...rest, imgIdx: remap.get(imgIdx) } : rest;
+      });
+      return { questions, images: keep.map((i) => imgs[i]) };
+    }
+
+    async function loadDoneQuizImages(c) {
+      try {
+        const token = await getAuthToken();
+        if (!token) { c.images = []; return; }
+        const res = await fetch(`/api/completed-quiz/${encodeURIComponent(c.doneQuizId)}/images`, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        c.images = res.ok && Array.isArray(data.images) ? data.images : [];
+      } catch (e) {
+        c.images = [];
+      }
+    }
+
+    function openFigure(src) {
+      const ov = document.createElement("div");
+      ov.className = "fig-overlay";
+      const img = new Image();
+      img.src = src;
+      img.onclick = (e) => { e.stopPropagation(); img.classList.toggle("zoomed"); };
+      const close = document.createElement("button");
+      close.className = "fig-close";
+      close.textContent = "✕ Close";
+      close.onclick = (e) => { e.stopPropagation(); ov.remove(); };
+      ov.onclick = () => ov.remove();
+      ov.appendChild(close);
+      ov.appendChild(img);
+      document.body.appendChild(ov);
+    }
+
     // ── AI quiz generation from an uploaded file ──
     async function generateAIQuizFromFile() {
       const fileInput  = document.getElementById("ai-file-input");
@@ -1453,7 +1680,7 @@ function sanitizeQuestions(questions) {
       const status      = document.getElementById("ai-file-status");
       const file = fileInput.files[0];
 
-      if (!file) { status.textContent = "Choose a PDF or text file first."; return; }
+      if (!file) { status.textContent = "Choose a PDF, image or text file first."; return; }
 
       const token = await getAuthToken();
       if (!token) {
@@ -1465,8 +1692,17 @@ function sanitizeQuestions(questions) {
       status.textContent = "Reading the file and writing questions from its content — this can take a bit longer for big documents.";
 
       try {
+        let uploadFile = file;
+        let firstImage = null;
+        if (isImageFile(file)) {
+          status.textContent = "Preparing your image…";
+          const prep = await prepareImageUpload(file);
+          uploadFile = prep.geminiFile;
+          firstImage = prep.display;
+          status.textContent = "Reading the image and writing questions from it…";
+        }
         const formData = new FormData();
-        formData.append("file", file);
+        formData.append("file", uploadFile);
         formData.append("count", countInput.value);
 
         const res = await fetch("/api/generate-quiz-from-file", {
@@ -1489,9 +1725,15 @@ function sanitizeQuestions(questions) {
           code: "AI",
           name: file.name.replace(/\.[^/.]+$/, ""),
           questions: data.questions,
-          sourceFile: file,
+          sourceFile: uploadFile,
           aiCount: countInput.value,
+          images: firstImage ? [firstImage] : [],
+          imageKeys: {},
         };
+        if (!isImageFile(file) && /\.pdf$|pdf/i.test(file.type + file.name)) {
+          status.textContent = "Cutting out the figures from your PDF…";
+        }
+        newCourse.questions = await attachFigureData(newCourse, uploadFile, data.questions);
         courses.push(newCourse);
         addAIGeneratedCount(data.questions.length);
         buildGrid();
