@@ -129,7 +129,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: "3mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 // Initialize the Gemini client (new @google/genai SDK)
@@ -184,6 +184,64 @@ function shuffleQuestionOptions(questions) {
     };
   });
 }
+
+
+// ── Image support ──
+// Quiz images are small JPEG data-URLs prepared in the browser. We keep them next to
+// the quiz in Firestore (no Firebase Storage needed), so everything is size-capped here.
+const MAX_QUIZ_IMAGES = 8;
+const MAX_IMAGE_CHARS = 220000;        // per image
+const MAX_TOTAL_IMAGE_CHARS = 800000;  // per quiz (Firestore docs max out at 1 MiB)
+
+function sanitizeImages(images) {
+  if (!Array.isArray(images)) return [];
+  const out = [];
+  let total = 0;
+  for (const img of images.slice(0, MAX_QUIZ_IMAGES)) {
+    const ok =
+      typeof img === "string" &&
+      img.length <= MAX_IMAGE_CHARS &&
+      total + img.length <= MAX_TOTAL_IMAGE_CHARS &&
+      /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(img);
+    if (ok) { total += img.length; out.push(img); } else { out.push(null); }
+  }
+  return out;
+}
+
+// Keeps only well-formed figure fields from the model: "page" (1-based) and
+// "figureBox" ([ymin, xmin, ymax, xmax] on a 0-1000 scale). Anything else is dropped.
+function cleanFigureFields(questions, mode) {
+  if (!Array.isArray(questions)) return questions;
+  return questions.map((q) => {
+    if (!q || typeof q !== "object") return q;
+    const { page, figureBox, image, imgIdx, ...rest } = q;
+    if (mode === "pdf") {
+      const p = parseInt(page, 10);
+      if (Number.isInteger(p) && p >= 1 && p <= 2000) {
+        rest.page = p;
+        if (Array.isArray(figureBox) && figureBox.length === 4) {
+          const b = figureBox.map(Number);
+          const [y0, x0, y1, x1] = b;
+          if (b.every((n) => Number.isFinite(n) && n >= 0 && n <= 1000) && y1 - y0 >= 50 && x1 - x0 >= 50) {
+            rest.figureBox = b;
+          }
+        }
+      }
+    }
+    return rest;
+  });
+}
+
+const PDF_FIGURE_INSTRUCTION = `
+
+Figures: if the document contains diagrams, photos, charts or other figures that matter for the material, include some questions that can only be answered by looking at a figure (for example identifying a marked structure). For every such question add two extra fields: "page" (the 1-based page number of the PDF where the figure appears) and "figureBox" ([ymin, xmin, ymax, xmax], each from 0 to 1000, relative to that page, tightly around the figure and its marker labels but excluding its caption). The student will be shown only that cropped figure above the question, so refer to "the figure" or to its letters/numbers/arrows in the question text, never to page numbers, and never let the question text give away the answer. If a figure's labels are spelled out in words, ask about the function, location or relationships of the labelled structure instead of asking for its name. Questions that do not depend on a figure must not have these two fields.`;
+
+const imageInstruction = (n) => `The attached image is study material (for example an anatomy or physiology diagram, a histology slide, a chart or a table). Generate ${n} quiz questions that can only be answered by looking at the image.
+- Use the labels, letters, numbers or arrows that appear in the image, e.g. "Which structure is indicated by the arrow labelled B?" or "The structure marked 3 is supplied by which nerve?".
+- Mix identification questions (what is this structure), location/relationship questions, and function questions about the structures shown.
+- If the image has no markers, ask about visible features, regions or relationships instead.
+- The student sees the image above every question, so never mention page numbers, and never let one question's text give away another question's answer.
+- Base everything strictly on what is visible in the image plus standard textbook facts about those structures.`;
 
 // ── 1. Generate Quiz from Topic ──
 app.post("/api/generate-quiz", requireAuth, async (req, res) => {
@@ -253,9 +311,11 @@ app.post("/api/generate-quiz-from-file", requireAuth, upload.single("file"), asy
     const isPdf = mimeType === "application/pdf" || mimeType === "application/x-pdf" || originalName.endsWith(".pdf");
     const isText = mimeType.startsWith("text/") || originalName.endsWith(".txt") || originalName.endsWith(".md");
 
-    if (!isPdf && !isText) {
+    const isImage = /^image\/(jpeg|png|webp)$/.test(mimeType) || /\.(jpe?g|png|webp)$/.test(originalName);
+
+    if (!isPdf && !isText && !isImage) {
       return res.status(400).json({
-        error: "Only PDF or plain text files (.pdf, .txt, .md) are supported.",
+        error: "Only PDF, image (.jpg, .png, .webp) or plain text files (.pdf, .txt, .md) are supported.",
       });
     }
 
@@ -288,13 +348,19 @@ definitions and concepts.`;
 
     if (isPdf) {
       // Send PDF buffer directly as base64 inlineData
-      contents.push({ text: instruction });
+      contents.push({ text: instruction + PDF_FIGURE_INSTRUCTION });
       contents.push({
         inlineData: {
           mimeType: "application/pdf",
           data: req.file.buffer.toString("base64"),
         },
       });
+    } else if (isImage) {
+      const imgMime = /png/.test(mimeType) || originalName.endsWith(".png") ? "image/png"
+        : /webp/.test(mimeType) || originalName.endsWith(".webp") ? "image/webp"
+        : "image/jpeg";
+      contents.push({ text: imageInstruction(numQuestions) });
+      contents.push({ inlineData: { mimeType: imgMime, data: req.file.buffer.toString("base64") } });
     } else {
       const fileText = req.file.buffer.toString("utf-8").slice(0, 100000);
       contents.push({ text: `${instruction}\n\nDOCUMENT CONTENT:\n"""\n${fileText}\n"""` });
@@ -309,7 +375,10 @@ definitions and concepts.`;
           responseMimeType: "application/json",
         },
       });
-      const questions = shuffleQuestionOptions(JSON.parse(response.text));
+      const questions = cleanFigureFields(
+        shuffleQuestionOptions(JSON.parse(response.text)),
+        isPdf ? "pdf" : "none"
+      );
 
       res.json({ questions, filename: req.file.originalname, remainingFree: usage.remainingFree, credits: usage.credits });
     } catch (genErr) {
@@ -436,7 +505,7 @@ app.post("/api/paystack/verify", requireAuth, async (req, res) => {
 app.post("/api/share-quiz", requireAuth, async (req, res) => {
   try {
     if (!firestore) return res.status(500).json({ error: "Sharing isn't set up yet." });
-    const { name, questions } = req.body || {};
+    const { name, questions, images } = req.body || {};
     if (!name || !Array.isArray(questions) || !questions.length) {
       return res.status(400).json({ error: "A quiz name and questions are required." });
     }
@@ -444,6 +513,7 @@ app.post("/api/share-quiz", requireAuth, async (req, res) => {
     await firestore.collection("sharedQuizzes").doc(shareId).set({
       name,
       questions,
+      images: sanitizeImages(images),
       createdBy: req.uid,
       createdAt: new Date().toISOString(),
     });
@@ -463,7 +533,7 @@ app.get("/api/shared-quiz/:id", async (req, res) => {
       return res.status(404).json({ error: "This shared quiz link is invalid or has expired." });
     }
     const data = snap.data();
-    res.json({ name: data.name, questions: data.questions });
+    res.json({ name: data.name, questions: data.questions, images: data.images || [] });
   } catch (err) {
     console.error("Fetch shared quiz error:", err);
     res.status(500).json({ error: "Couldn't load this quiz." });
@@ -522,13 +592,16 @@ function getWeekId(date = new Date()) {
 app.post("/api/completed-quiz", requireAuth, async (req, res) => {
   try {
     if (!firestore) return res.status(500).json({ error: "This feature isn't set up yet." });
-    const { name, questions, score, total, pct } = req.body || {};
+    const { name, questions, score, total, pct, images } = req.body || {};
+    const cleanImages = sanitizeImages(images);
     if (!name || !Array.isArray(questions) || !questions.length) {
       return res.status(400).json({ error: "A quiz name and questions are required." });
     }
     await firestore.collection("completedQuizzes").doc(req.uid).collection("items").add({
       name,
       questions,
+      images: cleanImages,
+      hasImages: cleanImages.some(Boolean),
       score: score ?? null,
       total: total ?? questions.length,
       pct: pct ?? null,
@@ -643,12 +716,30 @@ app.get("/api/completed-quizzes", requireAuth, async (req, res) => {
       .collection("items")
       .orderBy("completedAt", "desc")
       .limit(50)
+      .select("name", "questions", "score", "total", "pct", "completedAt", "hasImages")
       .get();
     const items = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     res.json({ items });
   } catch (err) {
     console.error("Fetch completed quizzes error:", err);
     res.status(500).json({ error: "Couldn't load your completed quizzes." });
+  }
+});
+
+// ── 9b. Images for one completed quiz (loaded only when the quiz is opened) ──
+app.get("/api/completed-quiz/:id/images", requireAuth, async (req, res) => {
+  try {
+    if (!firestore) return res.status(500).json({ error: "This feature isn't set up yet." });
+    const snap = await firestore
+      .collection("completedQuizzes")
+      .doc(req.uid)
+      .collection("items")
+      .doc(req.params.id)
+      .get();
+    res.json({ images: snap.exists ? snap.data().images || [] : [] });
+  } catch (err) {
+    console.error("Fetch quiz images error:", err);
+    res.status(500).json({ error: "Couldn't load this quiz's images." });
   }
 });
 
