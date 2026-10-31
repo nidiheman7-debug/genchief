@@ -659,6 +659,18 @@ body {
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <script>
+    // Parses a fetch response as JSON; if the host (e.g. Vercel) returned a plain-text
+    // error page instead, turn it into a friendly error rather than a JSON parse crash.
+    async function safeJson(res) {
+      const raw = await res.text();
+      try { return JSON.parse(raw); }
+      catch {
+        throw new Error(res.status === 504 || /timeout|took too long/i.test(raw)
+          ? "The server took too long. Please try again."
+          : "The server had a problem. Please try again in a moment.");
+      }
+    }
+
     // Firebase project config — Omega Prep
     const firebaseConfig = {
       apiKey: "AIzaSyBxi_VnDUI70TlGHOJlJEz-q78uDwVFDbQ",
@@ -768,7 +780,7 @@ body {
       if (!token) return;
       try {
         const res = await fetch("/api/leaderboard-name", { headers: { Authorization: `Bearer ${token}` } });
-        const data = await res.json();
+        const data = await safeJson(res);
         if (res.ok) {
           input.value = data.customName || "";
           input.placeholder = data.generatedName || "e.g. MathWizard";
@@ -797,7 +809,7 @@ body {
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ name: input.value }),
         });
-        const data = await res.json();
+        const data = await safeJson(res);
         if (!res.ok) throw new Error(data.error || "Couldn't save your nickname.");
         status.textContent = input.value.trim()
           ? `Saved! You'll show as "${data.displayName}" on the leaderboard.`
@@ -826,7 +838,7 @@ body {
       listEl.innerHTML = '<div class="empty-note">Loading…</div>';
       try {
         const res = await fetch("/api/leaderboard", { headers: { Authorization: `Bearer ${token}` } });
-        const data = await res.json();
+        const data = await safeJson(res);
         if (!res.ok) { listEl.innerHTML = '<div class="empty-note">Couldn\'t load the leaderboard right now.</div>'; return; }
 
         if (!data.top || !data.top.length) {
@@ -1074,9 +1086,7 @@ function sanitizeQuestions(questions) {
 
       // Figure (diagram / PDF figure) shown above the options, if this question has one
       const figEl = document.getElementById("q-image");
-      const figSrc = q.svg
-        ? "data:image/svg+xml;charset=utf-8," + encodeURIComponent(q.svg)
-        : ((q.imgIdx !== undefined && q.imgIdx !== null && c.images) ? c.images[q.imgIdx] : null);
+      const figSrc = (q.imgIdx !== undefined && q.imgIdx !== null && c.images) ? c.images[q.imgIdx] : null;
       figEl.innerHTML = "";
       if (figSrc) {
         const im = new Image();
@@ -1251,7 +1261,7 @@ function sanitizeQuestions(questions) {
 
       try {
         const res = await fetch("/api/completed-quizzes", { headers: { Authorization: `Bearer ${token}` } });
-        const data = await res.json();
+        const data = await safeJson(res);
         if (res.ok && Array.isArray(data.items)) {
           data.items.forEach((item) => {
             courses.push({
@@ -1292,7 +1302,7 @@ function sanitizeQuestions(questions) {
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ name: course.name, ...packImagesForSave(course) }),
         });
-        const data = await res.json();
+        const data = await safeJson(res);
         if (!res.ok) throw new Error(data.error || "Couldn't create a shareable link.");
         const shareUrl = `${window.location.origin}/?shared=${data.shareId}`;
 
@@ -1325,7 +1335,7 @@ function sanitizeQuestions(questions) {
         history.replaceState(null, "", window.location.pathname);
         try {
           const res = await fetch(`/api/shared-quiz/${encodeURIComponent(sharedId)}`);
-          const data = await res.json();
+          const data = await safeJson(res);
           if (!res.ok) { alert(data.error || "This shared quiz link is invalid or has expired."); return; }
           const newCourse = { code: "SHARED", name: data.name, questions: data.questions, images: data.images || [] };
           courses.push(newCourse);
@@ -1363,7 +1373,7 @@ function sanitizeQuestions(questions) {
             headers: { Authorization: `Bearer ${token}` },
             body: formData,
           });
-          const data = await res.json();
+          const data = await safeJson(res);
           if (res.status === 402) throw new Error("You've used today's free generations. Buy more from the Home screen to keep going.");
           if (!res.ok) throw new Error(data.error || "Failed to generate more questions.");
           newQuestions = await attachFigureData(course, course.sourceFile, data.questions);
@@ -1373,7 +1383,7 @@ function sanitizeQuestions(questions) {
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
             body: JSON.stringify({ topic: course.aiTopic, count: addCount }),
           });
-          const data = await res.json();
+          const data = await safeJson(res);
           if (res.status === 402) throw new Error("You've used today's free generations. Buy more from the Home screen to keep going.");
           if (!res.ok) throw new Error(data.error || "Failed to generate more questions.");
           newQuestions = data.questions;
@@ -1440,7 +1450,7 @@ function sanitizeQuestions(questions) {
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ topic, count }),
         });
-        const data = await res.json();
+        const data = await safeJson(res);
         if (res.status === 402) {
           status.innerHTML = "You've used today's free generations. ";
           const buyLink = document.createElement("a");
@@ -1651,7 +1661,7 @@ function sanitizeQuestions(questions) {
         const token = await getAuthToken();
         if (!token) { c.images = []; return; }
         const res = await fetch(`/api/completed-quiz/${encodeURIComponent(c.doneQuizId)}/images`, { headers: { Authorization: `Bearer ${token}` } });
-        const data = await res.json();
+        const data = await safeJson(res);
         c.images = res.ok && Array.isArray(data.images) ? data.images : [];
       } catch (e) {
         c.images = [];
@@ -1712,7 +1722,7 @@ function sanitizeQuestions(questions) {
           headers: { Authorization: `Bearer ${token}` },
           body: formData,
         });
-        const data = await res.json();
+        const data = await safeJson(res);
         if (res.status === 402) {
           status.innerHTML = "You've used today's free generations. ";
           const buyLink = document.createElement("a");
@@ -1985,7 +1995,7 @@ function sanitizeQuestions(questions) {
 
       try {
         const res = await fetch("/api/usage", { headers: { Authorization: `Bearer ${token}` } });
-        const data = await res.json();
+        const data = await safeJson(res);
         if (!res.ok) { usageEl.textContent = "Couldn't check your usage right now."; return; }
         if (data.remainingFree > 0) {
           usageEl.textContent = `${data.remainingFree} free generation${data.remainingFree===1?"":"s"} left today` + (data.credits > 0 ? ` · ${data.credits} credits` : "");
@@ -2009,7 +2019,7 @@ function sanitizeQuestions(questions) {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         });
-        const data = await res.json();
+        const data = await safeJson(res);
         if (!res.ok) throw new Error(data.error || "Couldn't start payment.");
         window.location.href = data.authorizationUrl;
       } catch (err) {
@@ -2077,7 +2087,7 @@ function sanitizeQuestions(questions) {
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ reference }),
         });
-        const data = await res.json();
+        const data = await safeJson(res);
         if (res.ok && data.credited) {
           showTxnModal({
             type: "success",
