@@ -659,6 +659,14 @@ body {
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <script>
+    // Turns raw browser network errors into something a student can act on.
+    function friendlyErr(err, fallback) {
+      const m = (err && err.message) || "";
+      if (/failed to fetch|load failed|networkerror|network request failed/i.test(m))
+        return "Couldn't reach the server (slow or dropped connection). Your generation wasn't used - please try again.";
+      return m || fallback;
+    }
+
     // Parses a fetch response as JSON; if the host (e.g. Vercel) returned a plain-text
     // error page instead, turn it into a friendly error rather than a JSON parse crash.
     async function safeJson(res) {
@@ -1400,7 +1408,7 @@ function sanitizeQuestions(questions) {
         showScreen("quiz");
         renderQuestion();
       } catch (err) {
-        alert(err.message || "Something went wrong generating more questions. Try again.");
+        alert(friendlyErr(err, "Something went wrong generating more questions. Try again."));
       } finally {
         clearBtnLoading(btn);
         refreshUsageDisplay();
@@ -1475,7 +1483,7 @@ function sanitizeQuestions(questions) {
         topicInput.value = "";
         startQuiz(courses.length - 1);
       } catch (err) {
-        status.textContent = err.message || "Something went wrong. Try again.";
+        status.textContent = friendlyErr(err, "Something went wrong. Try again.");
       } finally {
         clearBtnLoading(btn);
         // Always resync with the server's real usage count — whether this
@@ -1753,7 +1761,7 @@ function sanitizeQuestions(questions) {
         fileInput.value = "";
         startQuiz(courses.length - 1);
       } catch (err) {
-        status.textContent = err.message || "Something went wrong. Try again.";
+        status.textContent = friendlyErr(err, "Something went wrong. Try again.");
       } finally {
         clearBtnLoading(btn);
         refreshUsageDisplay();
