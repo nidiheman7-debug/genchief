@@ -136,10 +136,48 @@ app.use(express.static(path.join(__dirname, "public")));
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 // Rejects if a promise takes too long, so our own catch/refund path runs before Vercel kills the function.
-// The message matches the quota regex below, so users get the "your generation wasn't used" message.
-const GEN_TIMEOUT_MS = 50000;
-const withTimeout = (p, ms = GEN_TIMEOUT_MS) =>
-  Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("429 generation timeout")), ms))]);
+const withTimeout = (p, ms) =>
+  Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("503 generation timeout")), ms))]);
+
+// ── Gemini reliability: retry transient failures, then fall back to another model ──
+// Keep TOTAL_BUDGET_MS comfortably below "maxDuration" in vercel.json.
+const PRIMARY_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+const FALLBACK_MODELS = (process.env.GEMINI_FALLBACK_MODELS || "gemini-3.6-flash")
+  .split(",").map((m) => m.trim()).filter((m) => m && m !== PRIMARY_MODEL);
+const TOTAL_BUDGET_MS = 100000;   // give up after ~100s in total
+const PER_ATTEMPT_MS = 55000;     // a single Gemini call may take at most this long
+const BUSY_RE = /429|500|502|503|504|quota|rate.?limit|overload|unavailable|exhausted|high demand|timeout|deadline|internal|fetch failed|econnreset|etimedout|socket|json|unexpected token|empty/i;
+const isBusyError = (err) => BUSY_RE.test(String((err && (err.message || err.code)) || err));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function generateQuestionsJson(contents) {
+  // Two tries on the primary model, then two on each fallback model.
+  const plan = [PRIMARY_MODEL, PRIMARY_MODEL];
+  for (const m of FALLBACK_MODELS) plan.push(m, m);
+  const deadline = Date.now() + TOTAL_BUDGET_MS;
+  let lastErr;
+  for (let i = 0; i < plan.length; i++) {
+    const remaining = deadline - Date.now();
+    if (remaining < 8000) break;
+    try {
+      const response = await withTimeout(ai.models.generateContent({
+        model: plan[i],
+        contents,
+        config: { systemInstruction: QUESTION_SYSTEM_PROMPT, responseMimeType: "application/json" },
+      }), Math.min(PER_ATTEMPT_MS, remaining));
+      const parsed = JSON.parse(response.text);   // malformed/empty output also counts as a failed attempt
+      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("empty result");
+      if (i > 0) console.warn(`Gemini succeeded on attempt ${i + 1} using ${plan[i]}`);
+      return parsed;
+    } catch (err) {
+      lastErr = err;
+      console.warn(`Gemini attempt ${i + 1}/${plan.length} (${plan[i]}) failed:`, err && err.message);
+      if (!isBusyError(err)) throw err;            // e.g. bad request / invalid key: retrying won't help
+      await sleep(Math.min(1000 * (i + 1), 3000));
+    }
+  }
+  throw lastErr || new Error("503 generation failed");
+}
 
 const QUESTION_SYSTEM_PROMPT = `You generate university-level quiz questions.
 Respond with ONLY a raw JSON array matching this exact structure:
@@ -273,15 +311,8 @@ app.post("/api/generate-quiz", requireAuth, async (req, res) => {
 
     try {
       const userPrompt = `Generate ${numQuestions} quiz questions about: ${topic.trim()}`;
-      const response = await withTimeout(ai.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents: userPrompt,
-        config: {
-          systemInstruction: QUESTION_SYSTEM_PROMPT,
-          responseMimeType: "application/json",
-        },
-      }));
-      const questions = shuffleQuestionOptions(JSON.parse(response.text));
+      const parsed = await generateQuestionsJson(userPrompt);
+      const questions = shuffleQuestionOptions(parsed);
 
       res.json({ questions, remainingFree: usage.remainingFree, credits: usage.credits });
     } catch (genErr) {
@@ -291,7 +322,7 @@ app.post("/api/generate-quiz", requireAuth, async (req, res) => {
     }
   } catch (err) {
     console.error("Gemini Topic API Error:", err);
-    const isQuotaError = /429|quota|rate.?limit/i.test(err.message || "");
+    const isQuotaError = isBusyError(err);
     res.status(isQuotaError ? 503 : 500).json({
       error: isQuotaError
         ? "We're experiencing high demand right now — your generation wasn't used, please try again in a minute."
@@ -373,16 +404,9 @@ definitions and concepts.`;
     }
 
     try {
-      const response = await withTimeout(ai.models.generateContent({
-        model: "gemini-3.6-flash",
-        contents,
-        config: {
-          systemInstruction: QUESTION_SYSTEM_PROMPT,
-          responseMimeType: "application/json",
-        },
-      }));
+      const parsed = await generateQuestionsJson(contents);
       const questions = cleanFigureFields(
-        shuffleQuestionOptions(JSON.parse(response.text)),
+        shuffleQuestionOptions(parsed),
         isPdf ? "pdf" : "none"
       );
 
@@ -397,7 +421,7 @@ definitions and concepts.`;
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({ error: "File is too large (20MB max)." });
     }
-    const isQuotaError = /429|quota|rate.?limit/i.test(err.message || "");
+    const isQuotaError = isBusyError(err);
     res.status(isQuotaError ? 503 : 500).json({
       error: isQuotaError
         ? "We're experiencing high demand right now — your generation wasn't used, please try again in a minute."
